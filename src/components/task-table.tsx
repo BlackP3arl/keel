@@ -266,7 +266,7 @@ export function TaskTable({
                       <PriorityMark priority={task.priority} />
                     </TableCell>
                     <TableCell className="tabular-nums">{formatShort(task.start)}</TableCell>
-                    <TableCell className={cn("tabular-nums", overdue && "font-medium text-orange-800")}>
+                    <TableCell className={cn("tabular-nums", overdue && "font-medium text-[#f97066]")}>
                       {formatShort(task.due)}
                       {overdue ? " · Overdue" : ""}
                     </TableCell>

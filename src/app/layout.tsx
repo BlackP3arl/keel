@@ -27,7 +27,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className={`${sans.variable} ${display.variable} h-full antialiased`}>
+    <html lang="en" className={`${sans.variable} ${display.variable} dark h-full antialiased`}>
       <body className="min-h-full">
         <Providers>{children}</Providers>
       </body>

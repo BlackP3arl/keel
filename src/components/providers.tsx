@@ -11,7 +11,7 @@ export function Providers({ children }: { children: ReactNode }) {
     <TooltipProvider>
       <DeskProvider>
         <AppShell>{children}</AppShell>
-        <Toaster theme="light" />
+        <Toaster theme="dark" />
       </DeskProvider>
     </TooltipProvider>
   );

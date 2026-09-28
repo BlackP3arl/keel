@@ -4,16 +4,16 @@ import type { Health, LoadLevel, Priority, TaskStatus } from "@/lib/types";
 import { cn } from "cn";
 
 const healthClass: Record<Health, string> = {
-  on_track: "border-emerald-300 bg-emerald-50 text-emerald-950",
-  off_track: "border-orange-400 bg-orange-50 text-orange-950",
-  on_hold: "border-stone-300 bg-stone-100 text-stone-700",
-  done: "border-teal-300 bg-teal-50 text-teal-950",
+  on_track: "border-[#34d399]/45 bg-[#34d399]/15 text-[#6ee7b7]",
+  off_track: "border-[#fb923c]/50 bg-[#fb923c]/15 text-[#fdba74]",
+  on_hold: "border-[#2e303a] bg-[#22242c] text-[#9ca3af]",
+  done: "border-[#2dd4bf]/45 bg-[#2dd4bf]/15 text-[#5eead4]",
 };
 
 const loadClass: Record<LoadLevel, string> = {
-  comfortable: "border-emerald-300 bg-emerald-50 text-emerald-950",
-  busy: "border-amber-300 bg-amber-50 text-amber-950",
-  overloaded: "border-orange-400 bg-orange-50 text-orange-950",
+  comfortable: "border-[#34d399]/45 bg-[#34d399]/15 text-[#6ee7b7]",
+  busy: "border-[#fbbf24]/50 bg-[#fbbf24]/15 text-[#fcd34d]",
+  overloaded: "border-[#fb923c]/50 bg-[#fb923c]/15 text-[#fdba74]",
 };
 
 export function HealthBadge({ health, testId }: { health: Health; testId?: string }) {
@@ -45,7 +45,7 @@ export function PriorityMark({ priority }: { priority: Priority }) {
     <span
       className={cn(
         "text-xs font-medium",
-        priority === "high" && "text-orange-800",
+        priority === "high" && "text-[#fb923c]",
         priority === "medium" && "text-foreground",
         priority === "low" && "text-muted-foreground",
       )}

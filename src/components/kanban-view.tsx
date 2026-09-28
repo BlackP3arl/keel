@@ -229,7 +229,7 @@ function TaskCardView({
       data-overdue={overdue ? "true" : "false"}
       className={cn(
         "cursor-grab rounded-md border bg-card px-2.5 py-2 text-left shadow-xs active:cursor-grabbing",
-        overdue && "border-l-4 border-l-orange-700 bg-orange-50",
+        overdue && "border-l-4 border-l-[#f97066] bg-[#f97066]/10",
         overlay && "shadow-md",
       )}
       {...props}
@@ -239,7 +239,7 @@ function TaskCardView({
         <PriorityMark priority={task.priority} />
       </div>
       <p className="mt-1 truncate text-xs text-muted-foreground">{project?.name}</p>
-      <p className={cn("mt-2 text-xs", overdue ? "font-medium text-orange-900" : "text-muted-foreground")}>
+      <p className={cn("mt-2 text-xs", overdue ? "font-medium text-[#f97066]" : "text-muted-foreground")}>
         <span title={assignee?.email}>{assignee?.name ?? "Unassigned"}</span>
         <span> · {formatShort(task.due)}</span>
         {overdue ? <span> · Overdue</span> : null}

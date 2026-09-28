@@ -103,7 +103,7 @@ export function WorkloadView() {
               </div>
               <div className="rounded-md bg-muted/70 px-2 py-2">
                 <dt className="text-[11px] tracking-wide text-muted-foreground uppercase">Overdue</dt>
-                <dd className="font-heading text-xl tabular-nums text-orange-800">{row.overdue.length}</dd>
+                <dd className="font-heading text-xl tabular-nums text-[#f97066]">{row.overdue.length}</dd>
               </div>
               <div className="rounded-md bg-muted/70 px-2 py-2">
                 <dt className="text-[11px] tracking-wide text-muted-foreground uppercase">Done</dt>
@@ -113,9 +113,9 @@ export function WorkloadView() {
             {row.overdue.length > 0 ? (
               <ul className="mt-3 grid gap-1 text-sm">
                 {row.overdue.slice(0, 3).map((task) => (
-                  <li key={task.id} className="truncate text-orange-900">
+                  <li key={task.id} className="truncate text-[#f97066]">
                     {task.title}
-                    <span className="text-orange-800/80"> · due {formatShort(task.due)}</span>
+                    <span className="text-[#f97066]/80"> · due {formatShort(task.due)}</span>
                   </li>
                 ))}
                 {row.overdue.length > 3 ? (
