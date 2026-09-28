@@ -171,6 +171,20 @@ export function TaskTable({
             ...PRIORITIES.map((item) => ({ value: item, label: PRIORITY_LABEL[item] })),
           ]}
         />
+        {filtersActive ? (
+          <Button
+            variant="outline"
+            className="self-end"
+            onClick={() => {
+              setAssignee("all");
+              setStatus("all");
+              setPriority("all");
+              if (!projectId) setFilterProject("all");
+            }}
+          >
+            Clear filters
+          </Button>
+        ) : null}
       </div>
 
       {rows.length === 0 ? (
