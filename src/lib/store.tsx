@@ -2,8 +2,8 @@
 
 import { createContext, useContext, useMemo, useSyncExternalStore, type ReactNode } from "react";
 import { wouldCreateCycle } from "@/lib/links";
-import { seedData } from "@/lib/seed";
-import type { DeskState, Developer, Project, Task } from "@/lib/types";
+import { ensureSeededRoster, seedData } from "@/lib/seed";
+import type { Comment, Department, DeskState, Developer, Project, Task } from "@/lib/types";
 
 export const STORAGE_KEY = "keel.desk.v2";
 
@@ -19,7 +19,19 @@ type DeskContextValue = DeskState & {
   createTask: (input: Omit<Task, "id">) => MutationResult & { id?: string };
   updateTask: (id: string, patch: Partial<Omit<Task, "id">>) => MutationResult;
   deleteTask: (id: string) => void;
+  addComment: (input: { taskId: string; body: string; authorId: string }) => MutationResult & { id?: string };
+  deleteComment: (id: string) => void;
+  createDeveloper: (input: DeveloperInput) => MutationResult & { id?: string };
+  updateDeveloper: (id: string, patch: DeveloperInput) => MutationResult;
+  deleteDeveloper: (id: string) => MutationResult;
   resetDesk: () => void;
+};
+
+type DeveloperInput = {
+  name: string;
+  role: string;
+  department: string;
+  email: string;
 };
 
 const DeskContext = createContext<DeskContextValue | null>(null);
@@ -39,8 +51,34 @@ function isDeveloper(value: unknown): value is Developer {
       value.department === "Cloud & Security" ||
       value.department === "IT") &&
     typeof value.email === "string" &&
-    value.email.includes("@")
+    (value.email.length === 0 || value.email.includes("@"))
   );
+}
+
+function isDepartment(value: string): value is Department {
+  return (
+    value === "Software Engineering" ||
+    value === "Data Services" ||
+    value === "Cloud & Security" ||
+    value === "IT"
+  );
+}
+
+function developerFromInput(input: DeveloperInput, id: string): { person: Developer } | { error: string } {
+  const name = input.name.trim();
+  if (!name) return { error: "Give the person a name." };
+  if (!isDepartment(input.department)) return { error: "Pick a department." };
+  const email = input.email.trim();
+  if (email && !email.includes("@")) return { error: "Email needs an @." };
+  return {
+    person: {
+      id,
+      name,
+      role: input.role.trim(),
+      department: input.department,
+      email,
+    },
+  };
 }
 
 function isProject(value: unknown): value is Project {
@@ -55,6 +93,27 @@ function isProject(value: unknown): value is Project {
     typeof value.ownerId === "string" &&
     (value.predecessorProjectId === null || typeof value.predecessorProjectId === "string")
   );
+}
+
+function isComment(value: unknown): value is Comment {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value.id === "string" &&
+    value.id.length > 0 &&
+    typeof value.taskId === "string" &&
+    value.taskId.length > 0 &&
+    typeof value.body === "string" &&
+    value.body.trim().length > 0 &&
+    typeof value.createdAt === "string" &&
+    value.createdAt.length > 0 &&
+    typeof value.authorId === "string"
+  );
+}
+
+/** Older desks saved before comments existed still load. Bad comment rows are dropped. */
+function readComments(value: unknown): Comment[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter(isComment);
 }
 
 function isTask(value: unknown): value is Task {
@@ -88,9 +147,10 @@ function readStored(): DeskState | null {
     if (!parsed.tasks.every(isTask)) return null;
     if (parsed.developers.length === 0) return null;
     return {
-      developers: parsed.developers,
+      developers: ensureSeededRoster(parsed.developers),
       projects: parsed.projects,
       tasks: parsed.tasks,
+      comments: readComments(parsed.comments),
     };
   } catch {
     return null;
@@ -193,7 +253,7 @@ function updateProject(id: string, patch: Partial<Omit<Project, "id">>): Mutatio
   if (!next.name) return fail("Give the project a name.");
   const dateError = datesOk(next.start, next.due);
   if (dateError) return dateError;
-  if (!developerIds.has(next.ownerId)) return fail("Pick an owner from the roster.");
+  if (next.ownerId && !developerIds.has(next.ownerId)) return fail("Pick an owner from the roster.");
   const links = state.projects.map((project) => ({
     id: project.id,
     predecessorId: project.id === id ? next.predecessorProjectId : project.predecessorProjectId,
@@ -221,6 +281,10 @@ function deleteProject(id: string) {
         project.predecessorProjectId === id ? { ...project, predecessorProjectId: null } : project,
       ),
     tasks: state.tasks.filter((item) => item.projectId !== id),
+    comments: state.comments.filter((comment) => {
+      const task = state.tasks.find((item) => item.id === comment.taskId);
+      return task !== undefined && task.projectId !== id;
+    }),
   });
 }
 
@@ -272,7 +336,7 @@ function updateTask(id: string, patch: Partial<Omit<Task, "id">>): MutationResul
   };
   if (!next.title) return fail("Give the task a title.");
   if (!projectIds.has(next.projectId)) return fail("Pick a project.");
-  if (!developerIds.has(next.assigneeId)) return fail("Pick an assignee from the roster.");
+  if (next.assigneeId && !developerIds.has(next.assigneeId)) return fail("Pick an assignee from the roster.");
   const dateError = datesOk(next.start, next.due);
   if (dateError) return dateError;
   if (next.projectId !== current.projectId && next.predecessorTaskId) {
@@ -312,7 +376,71 @@ function deleteTask(id: string) {
     tasks: state.tasks
       .filter((item) => item.id !== id)
       .map((item) => (item.predecessorTaskId === id ? { ...item, predecessorTaskId: null } : item)),
+    comments: state.comments.filter((comment) => comment.taskId !== id),
   });
+}
+
+function addComment(input: { taskId: string; body: string; authorId: string }): MutationResult & { id?: string } {
+  const state = ensureClient();
+  const body = input.body.trim();
+  if (!body) return fail("Write a comment first.");
+  if (!state.tasks.some((item) => item.id === input.taskId)) return fail("That task is no longer on the desk.");
+  if (!state.developers.some((person) => person.id === input.authorId)) {
+    return fail("Pick an author from the roster.");
+  }
+  const id = crypto.randomUUID();
+  const comment: Comment = {
+    id,
+    taskId: input.taskId,
+    body,
+    createdAt: new Date().toISOString(),
+    authorId: input.authorId,
+  };
+  commit({ ...state, comments: [...state.comments, comment] });
+  return { ok: true, id };
+}
+
+function deleteComment(id: string) {
+  const state = ensureClient();
+  commit({
+    ...state,
+    comments: state.comments.filter((comment) => comment.id !== id),
+  });
+}
+
+function createDeveloper(input: DeveloperInput): MutationResult & { id?: string } {
+  const state = ensureClient();
+  const id = crypto.randomUUID();
+  const parsed = developerFromInput(input, id);
+  if ("error" in parsed) return fail(parsed.error);
+  commit({ ...state, developers: [...state.developers, parsed.person] });
+  return { ok: true, id };
+}
+
+function updateDeveloper(id: string, patch: DeveloperInput): MutationResult {
+  const state = ensureClient();
+  if (!state.developers.some((person) => person.id === id)) return fail("That person is no longer on the roster.");
+  const parsed = developerFromInput(patch, id);
+  if ("error" in parsed) return fail(parsed.error);
+  commit({
+    ...state,
+    developers: state.developers.map((person) => (person.id === id ? parsed.person : person)),
+  });
+  return { ok: true };
+}
+
+function deleteDeveloper(id: string): MutationResult {
+  const state = ensureClient();
+  if (!state.developers.some((person) => person.id === id)) return fail("That person is no longer on the roster.");
+  if (state.developers.length === 1) return fail("Keep at least one person on the roster.");
+  commit({
+    ...state,
+    developers: state.developers.filter((person) => person.id !== id),
+    projects: state.projects.map((project) => (project.ownerId === id ? { ...project, ownerId: "" } : project)),
+    tasks: state.tasks.map((task) => (task.assigneeId === id ? { ...task, assigneeId: "" } : task)),
+    comments: state.comments.map((comment) => (comment.authorId === id ? { ...comment, authorId: "" } : comment)),
+  });
+  return { ok: true };
 }
 
 function resetDesk() {
@@ -336,6 +464,11 @@ export function DeskProvider({ children }: { children: ReactNode }) {
       createTask,
       updateTask,
       deleteTask,
+      addComment,
+      deleteComment,
+      createDeveloper,
+      updateDeveloper,
+      deleteDeveloper,
       resetDesk,
     };
   }, [ready, snapshot]);

@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import {
   ChartGantt,
   Columns3,
+  Contact,
   LayoutDashboard,
   ListChecks,
   Menu,
@@ -32,6 +33,7 @@ const NAV: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/kanban", label: "Kanban", icon: Columns3 },
   { href: "/gantt", label: "Timeline", icon: ChartGantt },
   { href: "/tasks", label: "Tasks", icon: ListChecks },
+  { href: "/team", label: "Team", icon: Contact },
   { href: "/workload", label: "Workload", icon: Users },
 ];
 
@@ -153,7 +155,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         open={resetOpen}
         onOpenChange={setResetOpen}
         title="Reset the sample desk?"
-        body="This replaces projects, tasks, and the roster with the original sample. Edits saved in this browser will be lost."
+        body="This replaces projects, tasks, comments, and the roster with the original sample. Edits saved in this browser will be lost."
         confirmLabel="Reset"
         onConfirm={() => {
           desk.resetDesk();

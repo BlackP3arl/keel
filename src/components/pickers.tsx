@@ -13,6 +13,7 @@ import { DEPARTMENTS } from "@/lib/labels";
 import type { Developer } from "@/lib/types";
 
 const NONE = "__none__";
+const UNASSIGNED = "__unassigned__";
 
 export function LabeledSelect({
   label,
@@ -75,8 +76,10 @@ export function PersonSelect({
   allLabel?: string;
   full?: boolean;
 }) {
+  const known = value === "all" || developers.some((person) => person.id === value);
   const items = [
     ...(allowAll ? [{ value: "all", label: allLabel }] : []),
+    ...(!known ? [{ value: UNASSIGNED, label: "Unassigned" }] : []),
     ...developers.map((person) => ({ value: person.id, label: person.name })),
   ];
   const selected = developers.find((person) => person.id === value);
@@ -87,10 +90,11 @@ export function PersonSelect({
         {label}
       </span>
       <Select
-        value={value}
+        value={known ? value : UNASSIGNED}
         items={items}
         onValueChange={(next) => {
-          if (next) onValueChange(next);
+          if (!next) return;
+          onValueChange(next === UNASSIGNED ? "" : next);
         }}
       >
         <SelectTrigger className={full ? "w-full" : "w-full sm:w-56"} data-testid={testId}>
@@ -98,6 +102,7 @@ export function PersonSelect({
         </SelectTrigger>
         <SelectContent>
           {allowAll ? <SelectItem value="all">{allLabel}</SelectItem> : null}
+          {!known ? <SelectItem value={UNASSIGNED}>Unassigned</SelectItem> : null}
           {DEPARTMENTS.map((department) => {
             const people = developers.filter((person) => person.department === department);
             if (people.length === 0) return null;
@@ -118,7 +123,7 @@ export function PersonSelect({
       {selected ? (
         <p className="text-xs text-muted-foreground">
           {selected.department} · {selected.role}
-          <span className="block">{selected.email}</span>
+          {selected.email ? <span className="block">{selected.email}</span> : null}
         </p>
       ) : null}
     </div>

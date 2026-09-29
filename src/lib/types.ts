@@ -52,8 +52,18 @@ export type Task = {
   priority: Priority;
 };
 
+/** A note on a task. `authorId` is a roster person id, same as task assignees. */
+export type Comment = {
+  id: string;
+  taskId: string;
+  body: string;
+  createdAt: string;
+  authorId: string;
+};
+
 export type DeskState = {
   developers: Developer[];
   projects: Project[];
   tasks: Task[];
+  comments: Comment[];
 };

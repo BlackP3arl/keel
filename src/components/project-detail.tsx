@@ -191,7 +191,7 @@ export function ProjectDetail() {
         <TaskTable
           projectId={project.id}
           heading="Tasks"
-          lede="Work on this project only. Open a row to change the assignee, dates, or predecessor."
+          lede="Work on this project only. Change a status from its row, or open a task to edit the assignee, dates, or predecessor."
         />
       </div>
 

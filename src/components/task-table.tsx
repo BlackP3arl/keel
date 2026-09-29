@@ -1,12 +1,19 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Plus } from "lucide-react";
+import { toast } from "sonner";
 import { PriorityMark, TaskStatusBadge } from "@/components/badges";
 import { TaskDialog } from "@/components/editors";
 import { EmptyState, PageHeader } from "@/components/page-header";
 import { LabeledSelect, PersonSelect } from "@/components/pickers";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -37,7 +44,7 @@ const priorityRank: Record<Priority, number> = { high: 0, medium: 1, low: 2 };
 export function TaskTable({
   projectId,
   heading = "Tasks",
-  lede = "Sort any column. Filter by project, person, status, or priority, then open a row to edit it.",
+  lede = "Sort any column. Filter by project, person, status, or priority. Change a status from its row, or open a task to edit the rest.",
 }: {
   projectId?: string;
   heading?: string;
@@ -53,6 +60,8 @@ export function TaskTable({
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [editing, setEditing] = useState<Task | null>(null);
   const [creating, setCreating] = useState(false);
+  const statusMenuOpen = useRef(false);
+  const blockRowOpen = useRef(false);
 
   const lockedProject = projectId ?? (filterProject === "all" ? undefined : filterProject);
 
@@ -104,6 +113,22 @@ export function TaskTable({
     status,
   ]);
 
+  function noteStatusMenu(open: boolean) {
+    statusMenuOpen.current = open;
+    blockRowOpen.current = true;
+    if (!open) {
+      window.setTimeout(() => {
+        if (!statusMenuOpen.current) blockRowOpen.current = false;
+      }, 250);
+    }
+  }
+
+  function changeStatus(task: Task, status: TaskStatus) {
+    if (status === task.status) return;
+    const result = desk.updateTask(task.id, { status });
+    if (!result.ok) toast.error(result.reason);
+  }
+
   function toggleSort(key: SortKey) {
     if (sortKey === key) {
       setSortDir((dir) => (dir === "asc" ? "desc" : "asc"));
@@ -112,6 +137,14 @@ export function TaskTable({
     setSortKey(key);
     setSortDir("asc");
   }
+
+  const commentCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const comment of desk.comments) {
+      counts.set(comment.taskId, (counts.get(comment.taskId) ?? 0) + 1);
+    }
+    return counts;
+  }, [desk.comments]);
 
   const projectTasks = projectId ? desk.tasks.filter((task) => task.projectId === projectId) : desk.tasks;
   const filtersActive = assignee !== "all" || status !== "all" || priority !== "all" || (!projectId && filterProject !== "all");
@@ -230,6 +263,7 @@ export function TaskTable({
                 <SortHead label="Priority" sortKey="priority" active={sortKey} dir={sortDir} onSort={toggleSort} />
                 <SortHead label="Start" sortKey="start" active={sortKey} dir={sortDir} onSort={toggleSort} />
                 <SortHead label="Due" sortKey="due" active={sortKey} dir={sortDir} onSort={toggleSort} />
+                <TableHead className="text-right">Comments</TableHead>
                 <TableHead>Predecessor</TableHead>
               </TableRow>
             </TableHeader>
@@ -247,7 +281,10 @@ export function TaskTable({
                     data-task-id={task.id}
                     data-overdue={overdue ? "true" : "false"}
                     className="cursor-pointer"
-                    onClick={() => setEditing(task)}
+                    onClick={() => {
+                      if (blockRowOpen.current) return;
+                      setEditing(task);
+                    }}
                   >
                     <TableCell className="max-w-64 font-medium whitespace-normal">{task.title}</TableCell>
                     {projectId ? null : (
@@ -255,12 +292,21 @@ export function TaskTable({
                     )}
                     <TableCell>
                       <span className="block" title={assigneePerson?.email}>
-                        {assigneePerson?.name}
+                        {assigneePerson?.name ?? "Unassigned"}
                       </span>
                       <span className="text-xs text-muted-foreground">{assigneePerson?.department}</span>
                     </TableCell>
-                    <TableCell>
-                      <TaskStatusBadge status={task.status} />
+                    <TableCell
+                      className="min-w-36 cursor-default"
+                      data-testid="task-status-cell"
+                      onClick={(event) => event.stopPropagation()}
+                      onPointerDown={(event) => event.stopPropagation()}
+                    >
+                      <TaskStatusSelect
+                        task={task}
+                        onOpenChange={noteStatusMenu}
+                        onChange={(status) => changeStatus(task, status)}
+                      />
                     </TableCell>
                     <TableCell>
                       <PriorityMark priority={task.priority} />
@@ -269,6 +315,9 @@ export function TaskTable({
                     <TableCell className={cn("tabular-nums", overdue && "font-medium text-[#f97066]")}>
                       {formatShort(task.due)}
                       {overdue ? " · Overdue" : ""}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums" data-testid="task-comment-count">
+                      {commentCounts.get(task.id) ?? 0}
                     </TableCell>
                     <TableCell className="max-w-48 truncate text-muted-foreground">
                       {predecessor?.title ?? "—"}
@@ -288,6 +337,50 @@ export function TaskTable({
       />
       <TaskDialog open={Boolean(editing)} onOpenChange={(open) => !open && setEditing(null)} task={editing} />
     </div>
+  );
+}
+
+const STATUS_OPTIONS = TASK_STATUSES.map((item) => ({
+  value: item,
+  label: TASK_STATUS_LABEL[item],
+}));
+
+function TaskStatusSelect({
+  task,
+  onChange,
+  onOpenChange,
+}: {
+  task: Task;
+  onChange: (status: TaskStatus) => void;
+  onOpenChange: (open: boolean) => void;
+}) {
+  return (
+    <Select
+      value={task.status}
+      items={STATUS_OPTIONS}
+      onOpenChange={onOpenChange}
+      onValueChange={(next) => {
+        if (!next || next === task.status) return;
+        if ((TASK_STATUSES as readonly string[]).includes(next)) onChange(next as TaskStatus);
+      }}
+    >
+      <SelectTrigger
+        size="sm"
+        aria-label={`Status for ${task.title}`}
+        data-testid="task-status"
+        data-status={task.status}
+        className="h-7 w-full min-w-28 justify-between border-border bg-background px-1.5 hover:bg-muted/60"
+      >
+        <TaskStatusBadge status={task.status} />
+      </SelectTrigger>
+      <SelectContent align="start" className="min-w-36">
+        {STATUS_OPTIONS.map((option) => (
+          <SelectItem key={option.value} value={option.value}>
+            {option.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
 

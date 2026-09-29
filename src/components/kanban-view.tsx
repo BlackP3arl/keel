@@ -16,7 +16,7 @@ import {
 } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { useMemo, useRef, useState } from "react";
-import { Plus } from "lucide-react";
+import { MessageSquare, Plus } from "lucide-react";
 import { PriorityMark } from "@/components/badges";
 import { TaskDialog } from "@/components/editors";
 import { EmptyState, PageHeader } from "@/components/page-header";
@@ -221,6 +221,7 @@ function TaskCardView({
   const overdue = isTaskOverdue(task, today);
   const project = desk.projectById.get(task.projectId);
   const assignee = desk.developerById.get(task.assigneeId);
+  const commentCount = desk.comments.filter((comment) => comment.taskId === task.id).length;
 
   return (
     <article
@@ -243,6 +244,12 @@ function TaskCardView({
         <span title={assignee?.email}>{assignee?.name ?? "Unassigned"}</span>
         <span> · {formatShort(task.due)}</span>
         {overdue ? <span> · Overdue</span> : null}
+      </p>
+      <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground" data-testid="kanban-comment-count">
+        <MessageSquare className="size-3" />
+        <span>
+          {commentCount} {commentCount === 1 ? "comment" : "comments"}
+        </span>
       </p>
       <span className="sr-only">{PRIORITY_LABEL[task.priority]} priority</span>
     </article>

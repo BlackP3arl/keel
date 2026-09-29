@@ -41,7 +41,7 @@ export function WorkloadView() {
     <div data-testid="workload">
       <PageHeader
         title="Workload"
-        lede="All 19 people on the IT roster, across Software Engineering, Data Services, Cloud & Security, and IT. Comfortable is two or fewer open tasks and nothing overdue. Busy is three or four open, or one overdue. Overloaded is five or more open, or two or more overdue."
+        lede="Everyone on the roster, across Software Engineering, Data Services, Cloud & Security, and IT. Comfortable is two or fewer open tasks and nothing overdue. Busy is three or four open, or one overdue. Overloaded is five or more open, or two or more overdue."
       />
       <div className="mb-4 flex flex-wrap items-end gap-3">
         <LabeledSelect
@@ -76,7 +76,7 @@ export function WorkloadView() {
                 <p className="text-sm text-muted-foreground">
                   {row.person.role} · {row.person.department}
                 </p>
-                <p className="text-xs text-muted-foreground">{row.person.email}</p>
+                {row.person.email ? <p className="text-xs text-muted-foreground">{row.person.email}</p> : null}
               </div>
               <LoadBadge level={row.load} />
             </div>

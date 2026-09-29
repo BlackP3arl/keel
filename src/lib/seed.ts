@@ -20,6 +20,8 @@ function person(
 }
 
 /** IT staff list. Ids are stable and are not the email addresses. */
+const ahmedSalam = person("ahmed-salam", "Ahmed Salam", "CTO", "IT", "");
+
 const developers: Developer[] = [
   person("sham", "Sham Rahseed", "Information Security Officer", "Cloud & Security", "sham.rasheed@pension.gov.mv"),
   person("thoaha", "Thoaha Hassan", "Security Engineer", "Cloud & Security", "thoaha.hassan@pension.gov.mv"),
@@ -40,7 +42,17 @@ const developers: Developer[] = [
   person("midhath", "Mohamed Midhath Ahmed", "Software Engineer", "Software Engineering", "mohamed.midhath@pension.gov.mv"),
   person("adam", "Adam Waheed", "Lead Software Engineer", "Software Engineering", "adam.waheed@pension.gov.mv"),
   person("mahmood", "Mahmood Waheed", "IT Director", "IT", "mahmood.waheed@pension.gov.mv"),
+  ahmedSalam,
 ];
+
+/** Desks saved before Ahmed Salam was on the roster still load, and gain him. */
+export function ensureSeededRoster(current: Developer[]): Developer[] {
+  const present = current.some(
+    (person) => person.id === ahmedSalam.id || person.name.trim() === ahmedSalam.name,
+  );
+  if (present) return current;
+  return [...current, { ...ahmedSalam }];
+}
 
 function project(
   id: string,
@@ -183,5 +195,6 @@ export function seedData(): DeskState {
     developers: developers.map((item) => ({ ...item })),
     projects: projects.map((item) => ({ ...item })),
     tasks: tasks.map((item) => ({ ...item })),
+    comments: [],
   };
 }

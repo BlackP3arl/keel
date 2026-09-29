@@ -238,7 +238,7 @@ export function TaskDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="max-h-[min(85vh,52rem)] overflow-y-auto sm:max-w-lg">
         {open ? (
           <TaskForm
             task={task ?? null}
@@ -315,6 +315,7 @@ function TaskForm({
           Assign anyone on the roster, including Data Services, Cloud & Security, and the IT Director. A predecessor has to be another task on the same project.
         </DialogDescription>
       </DialogHeader>
+      {task ? <TaskComments task={task} /> : null}
       <form
         className="grid gap-3"
         onSubmit={(event) => {
@@ -408,5 +409,116 @@ function TaskForm({
         />
       ) : null}
     </>
+  );
+}
+
+function formatCommentTime(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return date.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function TaskComments({ task }: { task: Task }) {
+  const desk = useDesk();
+  const [body, setBody] = useState("");
+  const [authorId, setAuthorId] = useState(
+    desk.developers.some((person) => person.id === task.assigneeId) ? task.assigneeId : (desk.developers[0]?.id ?? ""),
+  );
+  const [error, setError] = useState<string | null>(null);
+
+  const thread = desk.comments
+    .filter((comment) => comment.taskId === task.id)
+    .slice()
+    .sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id));
+
+  function add() {
+    const result = desk.addComment({ taskId: task.id, body, authorId });
+    if (!result.ok) {
+      setError(result.reason);
+      return;
+    }
+    setBody("");
+    setError(null);
+    toast("Comment added.");
+  }
+
+  return (
+    <section className="grid gap-3 border-b pb-3" data-testid="task-comments">
+      <h3 className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Comments</h3>
+      {thread.length === 0 ? (
+        <p className="text-sm text-muted-foreground" data-testid="comment-empty">
+          There are no comments yet.
+        </p>
+      ) : (
+        <ol className="grid gap-2" data-testid="comment-thread">
+          {thread.map((comment) => {
+            const author = desk.developerById.get(comment.authorId);
+            return (
+              <li key={comment.id} className="rounded-md border bg-background px-2.5 py-2" data-testid="task-comment">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-xs text-muted-foreground">
+                    <span className="font-medium text-foreground">{author?.name ?? "Unknown"}</span>
+                    {author ? <span> · {author.department}</span> : null}
+                    <span> · {formatCommentTime(comment.createdAt)}</span>
+                  </p>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="xs"
+                    data-testid="comment-delete"
+                    onClick={() => {
+                      desk.deleteComment(comment.id);
+                      toast("Comment deleted.");
+                    }}
+                  >
+                    Delete
+                  </Button>
+                </div>
+                <p className="mt-1 text-sm whitespace-pre-wrap">{comment.body}</p>
+              </li>
+            );
+          })}
+        </ol>
+      )}
+      <form
+        className="grid gap-3"
+        onSubmit={(event) => {
+          event.preventDefault();
+          add();
+        }}
+      >
+        <PersonSelect
+          label="Author"
+          value={authorId}
+          onValueChange={setAuthorId}
+          developers={desk.developers}
+          testId="comment-author"
+        />
+        <Field label="Comment">
+          <Textarea
+            value={body}
+            onChange={(event) => setBody(event.target.value)}
+            rows={2}
+            placeholder="Add a note for this task"
+            data-testid="comment-body"
+          />
+        </Field>
+        {error ? (
+          <p role="alert" className="text-sm text-destructive">
+            {error}
+          </p>
+        ) : null}
+        <div>
+          <Button type="submit" data-testid="comment-add">
+            Add comment
+          </Button>
+        </div>
+      </form>
+    </section>
   );
 }
