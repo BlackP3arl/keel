@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { toast } from "sonner";
+import { CreateProjectPrompt } from "@/components/create-project-prompt";
 import { EmptyState, PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,6 +16,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { mostRecentProjectIds } from "@/lib/activity";
 import { addDays, daysBetween, formatISODate, parseISODate, startOfDay } from "@/lib/dates";
 import { isTaskOverdue, projectHealth } from "@/lib/status";
 import { useDesk } from "@/lib/store";
@@ -83,10 +85,16 @@ function dueFromStart(start: string, duration: number): string {
   return formatISODate(addDays(parseISODate(start), days - 1));
 }
 
-function buildModel(projects: Project[], tasks: Task[], selectedIds: string[], today: Date): GanttModel {
-  const chosen = new Set(selectedIds);
+function buildModel(
+  projects: Project[],
+  tasks: Task[],
+  selection: string[] | "all" | "none",
+  today: Date,
+): GanttModel {
+  if (selection === "none") return { categories: [], series: [] };
+  const chosen = selection === "all" ? null : new Set(selection);
   const ordered = [...projects]
-    .filter((project) => chosen.size === 0 || chosen.has(project.id))
+    .filter((project) => chosen === null || chosen.has(project.id))
     .sort((a, b) => a.start.localeCompare(b.start) || a.name.localeCompare(b.name));
 
   const categories: CategoryRow[] = [];
@@ -166,22 +174,26 @@ function modelKey(model: GanttModel): string {
 export function GanttView() {
   const desk = useDesk();
   const today = useMemo(() => startOfDay(new Date()), []);
-  const [projectFilter, setProjectFilter] = useState<string[]>([]);
+  const [projectFilter, setProjectFilter] = useState<string[] | "all" | null>(null);
   const [chartReady, setChartReady] = useState(false);
   const [chartError, setChartError] = useState<string | null>(null);
   const hostRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<{ root: { dispose: () => void }; chart: GanttChartHandle } | null>(null);
   const deskRef = useRef<DeskSlice>(desk);
-  const filterRef = useRef(projectFilter);
+  const filterRef = useRef<string[] | "all" | "none">("none");
   const todayRef = useRef(today);
   const appliedKey = useRef("");
   const pauseApply = useRef(false);
+  if (desk.ready && projectFilter === null) {
+    setProjectFilter(mostRecentProjectIds(desk.projects, desk.tasks, desk.comments));
+  }
+  const selection = projectFilter;
 
   useEffect(() => {
     deskRef.current = desk;
-    filterRef.current = projectFilter;
+    filterRef.current = selection === null ? "none" : selection;
     todayRef.current = today;
-  }, [desk, projectFilter, today]);
+  }, [desk, selection, today]);
 
   const projectOptions = useMemo(
     () => [...desk.projects].sort((a, b) => a.name.localeCompare(b.name)),
@@ -189,16 +201,20 @@ export function GanttView() {
   );
 
   const selectedProjects = useMemo(() => {
-    if (projectFilter.length === 0) return [];
-    const chosen = new Set(projectFilter);
+    if (!Array.isArray(selection)) return [];
+    const chosen = new Set(selection);
     return projectOptions.filter((project) => chosen.has(project.id));
-  }, [projectFilter, projectOptions]);
+  }, [projectOptions, selection]);
 
-  const filterLabel = selectedProjects.length === 0 ? "All projects" : selectedProjects.map((project) => project.name).join(", ");
+  const filterLabel =
+    selection === "all" || selection === null
+      ? "All projects"
+      : selectedProjects.map((project) => project.name).join(", ");
 
+  const chartSelection = selection === null ? "none" : selection;
   const model = useMemo(
-    () => buildModel(desk.projects, desk.tasks, selectedProjects.map((project) => project.id), today),
-    [desk.projects, desk.tasks, selectedProjects, today],
+    () => buildModel(desk.projects, desk.tasks, chartSelection, today),
+    [chartSelection, desk.projects, desk.tasks, today],
   );
   const key = useMemo(() => modelKey(model), [model]);
 
@@ -323,7 +339,17 @@ export function GanttView() {
   }, [chartReady, key, model]);
 
   return (
-    <div data-testid="gantt" className="flex min-h-[calc(100dvh-8rem)] flex-col">
+    <div
+      data-testid="gantt"
+      data-selected-projects={
+        selection === "all" ? "all" : Array.isArray(selection) ? selection.join(",") : ""
+      }
+      data-chart-projects={model.categories
+        .filter((row) => !row.parentId)
+        .map((row) => row.name)
+        .join("|")}
+      className="flex min-h-[calc(100dvh-8rem)] flex-col"
+    >
       <PageHeader
         title="Timeline"
         lede="Projects sit above their tasks. Lines run from a predecessor to the work that follows it. Drag a bar to move its dates. Rust bars are late."
@@ -331,37 +357,45 @@ export function GanttView() {
           <ProjectFilter
             projects={projectOptions}
             selectedIds={selectedProjects.map((project) => project.id)}
-            label={filterLabel}
+            label={selection === null ? "Projects" : filterLabel}
             onToggle={(id, checked) => {
               setProjectFilter((current) => {
-                const next = new Set(current);
+                const base = Array.isArray(current) ? current : [];
+                const next = new Set(base);
                 if (checked) next.add(id);
                 else next.delete(id);
-                return projectOptions.filter((project) => next.has(project.id)).map((project) => project.id);
+                const ids = projectOptions.filter((project) => next.has(project.id)).map((project) => project.id);
+                return ids.length === 0 ? "all" : ids;
               });
             }}
-            onClear={() => setProjectFilter([])}
+            onClear={() => setProjectFilter("all")}
           />
         }
       />
 
-      {model.categories.length === 0 ? (
+      {selection === null ? (
+        <div className="h-[calc(100dvh-14rem)] min-h-[36rem] w-full rounded-lg border border-border bg-[#111318]" />
+      ) : model.categories.length === 0 ? (
         <div data-testid="gantt-empty">
-          <EmptyState
-            title="No matching projects"
-            body={
-              selectedProjects.length > 0
-                ? "Nothing on the timeline matches this filter."
-                : "Projects you add will appear here with their tasks."
-            }
-            action={
-              selectedProjects.length > 0 ? (
-                <Button size="sm" variant="outline" onClick={() => setProjectFilter([])}>
-                  Show all projects
-                </Button>
-              ) : undefined
-            }
-          />
+          {desk.projects.length === 0 ? (
+            <CreateProjectPrompt body="Create a project and it will show here with its tasks." />
+          ) : (
+            <EmptyState
+              title="No matching projects"
+              body={
+                selectedProjects.length > 0
+                  ? "Nothing on the timeline matches this filter."
+                  : "Projects you add will appear here with their tasks."
+              }
+              action={
+                selectedProjects.length > 0 ? (
+                  <Button size="sm" variant="outline" onClick={() => setProjectFilter("all")}>
+                    Show all projects
+                  </Button>
+                ) : undefined
+              }
+            />
+          )}
         </div>
       ) : (
         <>
@@ -393,7 +427,7 @@ type GanttChartHandle = import("@amcharts/amcharts5/gantt").Gantt;
 function writeDraggedDates(
   chart: GanttChartHandle,
   desk: DeskSlice,
-  selectedIds: string[],
+  selection: string[] | "all" | "none",
   today: Date,
   pauseApply: { current: boolean },
   appliedKey: { current: string },
@@ -422,7 +456,7 @@ function writeDraggedDates(
 
   if (!changed) return null;
 
-  const nextKey = modelKey(buildModel(desk.projects, nextTasks, selectedIds, today));
+  const nextKey = modelKey(buildModel(desk.projects, nextTasks, selection, today));
   pauseApply.current = true;
   appliedKey.current = nextKey;
   try {

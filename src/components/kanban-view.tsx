@@ -16,13 +16,13 @@ import {
 } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { useMemo, useRef, useState } from "react";
-import { MessageSquare, Plus } from "lucide-react";
-import { PriorityMark } from "@/components/badges";
+import { Circle, CircleCheck, CircleDashed, CircleDot, Eye, Flag, Plus, type LucideIcon } from "lucide-react";
+import { CreateProjectPrompt } from "@/components/create-project-prompt";
 import { TaskDialog } from "@/components/editors";
 import { EmptyState, PageHeader } from "@/components/page-header";
 import { LabeledSelect } from "@/components/pickers";
 import { Button } from "@/components/ui/button";
-import { formatShort } from "@/lib/dates";
+import { formatBoardDue } from "@/lib/dates";
 import { PRIORITY_LABEL, TASK_STATUSES, TASK_STATUS_LABEL } from "@/lib/labels";
 import { isTaskOverdue } from "@/lib/status";
 import { useDesk } from "@/lib/store";
@@ -37,13 +37,60 @@ const collision: CollisionDetection = (args) => {
 
 const priorityRank: Record<Priority, number> = { high: 0, medium: 1, low: 2 };
 
+const COLUMN_TONE: Record<
+  TaskStatus,
+  { icon: LucideIcon; pill: string; wash: string; ink: string; edge: string }
+> = {
+  backlog: {
+    icon: CircleDashed,
+    pill: "bg-[#6b7280] text-white",
+    wash: "bg-[#9ca3af]/10",
+    ink: "text-[#9ca3af]",
+    edge: "border-[#9ca3af]/20",
+  },
+  todo: {
+    icon: Circle,
+    pill: "bg-[#e7e5e4] text-[#1c1917]",
+    wash: "bg-[#e7e5e4]/8",
+    ink: "text-[#d6d3d1]",
+    edge: "border-[#e7e5e4]/15",
+  },
+  in_progress: {
+    icon: CircleDot,
+    pill: "bg-[#2563eb] text-white",
+    wash: "bg-[#2563eb]/12",
+    ink: "text-[#60a5fa]",
+    edge: "border-[#2563eb]/25",
+  },
+  in_review: {
+    icon: Eye,
+    pill: "bg-[#d97706] text-[#111318]",
+    wash: "bg-[#d97706]/12",
+    ink: "text-[#fbbf24]",
+    edge: "border-[#d97706]/25",
+  },
+  done: {
+    icon: CircleCheck,
+    pill: "bg-[#16a34a] text-white",
+    wash: "bg-[#16a34a]/12",
+    ink: "text-[#4ade80]",
+    edge: "border-[#16a34a]/25",
+  },
+};
+
+const FLAG_CLASS: Record<Priority, string> = {
+  high: "fill-[#f97066] text-[#f97066]",
+  medium: "fill-[#fbbf24] text-[#fbbf24]",
+  low: "fill-[#6b7280] text-[#6b7280]",
+};
+
 export function KanbanView() {
   const desk = useDesk();
   const today = useMemo(() => new Date(), []);
   const [projectId, setProjectId] = useState("all");
   const [activeId, setActiveId] = useState<string | null>(null);
   const [editing, setEditing] = useState<Task | null>(null);
-  const [creating, setCreating] = useState(false);
+  const [creating, setCreating] = useState<TaskStatus | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
   const visible = desk.tasks.filter((task) => projectId === "all" || task.projectId === projectId);
@@ -60,18 +107,18 @@ export function KanbanView() {
   }
 
   return (
-    <div data-testid="kanban">
+    <div data-testid="kanban" className="flex h-full min-h-0 flex-col">
       <PageHeader
         title="Kanban"
-        lede="Drag a card into another column to change its status. Rust marks a task past its due date."
+        lede="Drag a card into another column to change its status. Overdue dates stay red."
         action={
-          <Button onClick={() => setCreating(true)}>
+          <Button onClick={() => setCreating("todo")}>
             <Plus />
             New task
           </Button>
         }
       />
-      <div className="mb-4">
+      <div className="mb-4 shrink-0">
         <LabeledSelect
           label="Project"
           value={projectId}
@@ -84,6 +131,10 @@ export function KanbanView() {
         />
       </div>
 
+      {desk.projects.length === 0 ? (
+        <CreateProjectPrompt body="Create a project before you add tasks to the board." />
+      ) : (
+      <>
       {visible.length === 0 ? (
         <EmptyState
           title="No tasks in this view"
@@ -93,7 +144,7 @@ export function KanbanView() {
               : "This project has no tasks yet. Add one, or switch the filter back to all projects."
           }
           action={
-            <Button onClick={() => setCreating(true)}>
+            <Button onClick={() => setCreating("todo")}>
               <Plus />
               New task
             </Button>
@@ -108,7 +159,12 @@ export function KanbanView() {
         onDragCancel={() => setActiveId(null)}
         onDragEnd={onDragEnd}
       >
-        <div className={cn("flex gap-3 overflow-x-auto pb-2", visible.length === 0 && "mt-4", "md:grid md:grid-cols-5")}>
+        <div
+          className={cn(
+            "flex min-h-0 flex-1 gap-3 overflow-x-auto pb-1",
+            visible.length === 0 && "mt-4 min-h-80",
+          )}
+        >
           {TASK_STATUSES.map((status) => (
             <Column
               key={status}
@@ -118,6 +174,7 @@ export function KanbanView() {
                 .sort((a, b) => priorityRank[a.priority] - priorityRank[b.priority] || a.due.localeCompare(b.due))}
               today={today}
               onOpen={setEditing}
+              onAdd={setCreating}
             />
           ))}
         </div>
@@ -125,11 +182,16 @@ export function KanbanView() {
           {activeTask ? <TaskCardView task={activeTask} today={today} overlay /> : null}
         </DragOverlay>
       </DndContext>
+      </>
+      )}
 
       <TaskDialog
-        open={creating}
-        onOpenChange={setCreating}
+        open={creating !== null}
+        onOpenChange={(open) => {
+          if (!open) setCreating(null);
+        }}
         defaultProjectId={projectId === "all" ? undefined : projectId}
+        defaultStatus={creating ?? "todo"}
       />
       <TaskDialog open={Boolean(editing)} onOpenChange={(open) => !open && setEditing(null)} task={editing} />
     </div>
@@ -141,31 +203,59 @@ function Column({
   tasks,
   today,
   onOpen,
+  onAdd,
 }: {
   status: TaskStatus;
   tasks: Task[];
   today: Date;
   onOpen: (task: Task) => void;
+  onAdd: (status: TaskStatus) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
+  const tone = COLUMN_TONE[status];
+  const Icon = tone.icon;
+  const label = TASK_STATUS_LABEL[status];
+
   return (
-    <section className="flex w-72 shrink-0 flex-col md:w-auto" data-testid={`column-${status}`}>
-      <header className="mb-2 flex items-baseline justify-between px-1">
-        <h2 className="text-sm font-medium">{TASK_STATUS_LABEL[status]}</h2>
-        <span className="text-xs tabular-nums text-muted-foreground">{tasks.length}</span>
+    <section
+      className={cn(
+        "flex h-full w-[17.25rem] shrink-0 flex-col rounded-xl border px-2 pt-2 pb-1.5",
+        tone.wash,
+        tone.edge,
+        isOver && "ring-1 ring-white/25",
+      )}
+      data-testid={`column-${status}`}
+    >
+      <header className="mb-2 px-0.5">
+        <h2
+          className={cn(
+            "inline-flex max-w-full items-center gap-1.5 rounded-md px-2 py-1 text-xs font-semibold",
+            tone.pill,
+          )}
+        >
+          <Icon className="size-3.5 shrink-0" aria-hidden />
+          <span className="truncate">{label}</span>
+          <span className="tabular-nums opacity-80">{tasks.length}</span>
+        </h2>
       </header>
-      <div
-        ref={setNodeRef}
-        className={cn(
-          "flex min-h-48 flex-1 flex-col gap-2 rounded-lg bg-muted/70 p-2",
-          isOver && "bg-accent",
-        )}
-      >
-        {tasks.length === 0 ? (
-          <p className="px-1 py-6 text-center text-xs text-muted-foreground">Nothing here</p>
-        ) : (
-          tasks.map((task) => <TaskCard key={task.id} task={task} today={today} onOpen={onOpen} />)
-        )}
+      <div ref={setNodeRef} className="flex min-h-0 flex-1 flex-col">
+        <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-0.5">
+          {tasks.map((task) => (
+            <TaskCard key={task.id} task={task} today={today} onOpen={onOpen} />
+          ))}
+        </div>
+        <button
+          type="button"
+          className={cn(
+            "mt-1 flex w-full shrink-0 items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-[13px] font-medium hover:bg-white/5",
+            tone.ink,
+          )}
+          data-testid={`add-task-${status}`}
+          onClick={() => onAdd(status)}
+        >
+          <Plus className="size-3.5" aria-hidden />
+          Add task
+        </button>
       </div>
     </section>
   );
@@ -207,6 +297,12 @@ function TaskCard({
   );
 }
 
+function assigneeInitial(name: string | undefined): string {
+  const trimmed = name?.trim();
+  if (!trimmed) return "?";
+  return trimmed.charAt(0).toUpperCase();
+}
+
 function TaskCardView({
   task,
   today,
@@ -219,9 +315,8 @@ function TaskCardView({
 } & React.HTMLAttributes<HTMLElement>) {
   const desk = useDesk();
   const overdue = isTaskOverdue(task, today);
-  const project = desk.projectById.get(task.projectId);
   const assignee = desk.developerById.get(task.assigneeId);
-  const commentCount = desk.comments.filter((comment) => comment.taskId === task.id).length;
+  const dueLabel = formatBoardDue(task.due, today);
 
   return (
     <article
@@ -229,29 +324,34 @@ function TaskCardView({
       data-task-id={task.id}
       data-overdue={overdue ? "true" : "false"}
       className={cn(
-        "cursor-grab rounded-md border bg-card px-2.5 py-2 text-left shadow-xs active:cursor-grabbing",
-        overdue && "border-l-4 border-l-[#f97066] bg-[#f97066]/10",
-        overlay && "shadow-md",
+        "cursor-grab rounded-lg border border-white/8 bg-[#14161c] px-2.5 py-2 text-left shadow-xs active:cursor-grabbing",
+        overlay && "shadow-lg",
       )}
       {...props}
     >
-      <div className="flex items-start justify-between gap-2">
-        <h3 className="text-sm leading-snug font-medium">{task.title}</h3>
-        <PriorityMark priority={task.priority} />
-      </div>
-      <p className="mt-1 truncate text-xs text-muted-foreground">{project?.name}</p>
-      <p className={cn("mt-2 text-xs", overdue ? "font-medium text-[#f97066]" : "text-muted-foreground")}>
-        <span title={assignee?.email}>{assignee?.name ?? "Unassigned"}</span>
-        <span> · {formatShort(task.due)}</span>
-        {overdue ? <span> · Overdue</span> : null}
-      </p>
-      <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground" data-testid="kanban-comment-count">
-        <MessageSquare className="size-3" />
-        <span>
-          {commentCount} {commentCount === 1 ? "comment" : "comments"}
+      <h3 className="text-[13px] leading-snug font-medium">{task.title}</h3>
+      <div className="mt-2 flex items-center gap-1.5">
+        <span
+          className="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-white/10 text-[10px] font-medium text-foreground"
+          title={assignee?.name ?? "Unassigned"}
+        >
+          {assigneeInitial(assignee?.name)}
         </span>
-      </p>
-      <span className="sr-only">{PRIORITY_LABEL[task.priority]} priority</span>
+        <span
+          className={cn(
+            "text-[11px]",
+            overdue && "font-medium text-[#f97066]",
+            !overdue && task.status === "done" && "text-[#4ade80]",
+            !overdue && task.status !== "done" && "text-muted-foreground",
+          )}
+        >
+          {dueLabel}
+        </span>
+        <Flag
+          className={cn("ml-auto size-3.5 shrink-0", FLAG_CLASS[task.priority])}
+          aria-label={`${PRIORITY_LABEL[task.priority]} priority`}
+        />
+      </div>
     </article>
   );
 }

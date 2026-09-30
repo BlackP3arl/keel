@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { toast } from "sonner";
 import {
   ChartGantt,
   Columns3,
@@ -11,12 +10,10 @@ import {
   LayoutDashboard,
   ListChecks,
   Menu,
-  RotateCcw,
   Users,
   type LucideIcon,
 } from "lucide-react";
-import { ConfirmDialog } from "@/components/confirm-dialog";
-import { Button } from "@/components/ui/button";
+import { ViewErrorBoundary } from "@/components/view-error-boundary";
 import { Separator } from "@/components/ui/separator";
 import {
   Sheet,
@@ -76,8 +73,8 @@ function Brand() {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const desk = useDesk();
+  const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
-  const [resetOpen, setResetOpen] = useState(false);
 
   return (
     <div className="flex h-dvh bg-background text-foreground">
@@ -93,15 +90,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <p className="text-xs text-muted-foreground">
             {desk.developers.length} people on the IT roster. Saved in this browser.
           </p>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="mt-2 -ml-2"
-            onClick={() => setResetOpen(true)}
-          >
-            <RotateCcw />
-            Reset demo data
-          </Button>
         </div>
       </aside>
 
@@ -125,18 +113,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <p className="text-xs text-muted-foreground">
                   {desk.developers.length} people on the IT roster. Saved in this browser.
                 </p>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="mt-2 -ml-2"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    setResetOpen(true);
-                  }}
-                >
-                  <RotateCcw />
-                  Reset demo data
-                </Button>
               </div>
             </SheetContent>
           </Sheet>
@@ -144,25 +120,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </header>
         <main className="min-h-0 flex-1 overflow-y-auto px-4 py-4 md:px-6 md:py-6">
           {desk.ready ? (
-            children
+            <ViewErrorBoundary key={pathname}>{children}</ViewErrorBoundary>
           ) : (
             <p className="text-sm text-muted-foreground">Opening the delivery desk…</p>
           )}
         </main>
       </div>
-
-      <ConfirmDialog
-        open={resetOpen}
-        onOpenChange={setResetOpen}
-        title="Reset the sample desk?"
-        body="This replaces projects, tasks, comments, and the roster with the original sample. Edits saved in this browser will be lost."
-        confirmLabel="Reset"
-        onConfirm={() => {
-          desk.resetDesk();
-          setResetOpen(false);
-          toast("Sample desk restored.");
-        }}
-      />
     </div>
   );
 }

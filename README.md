@@ -1,6 +1,6 @@
 # Keel
 
-Delivery desk for the project manager who runs the IT roster. It covers projects, a kanban, a timeline with dependencies, a task list, and workload for all 19 people.
+Delivery desk for the project manager who runs the IT roster. It covers projects, a kanban, a timeline with dependencies, a task list, and workload for all 20 people.
 
 One person updates everything. There is no login and no server database. Edits stay in this browser.
 
@@ -13,7 +13,7 @@ npm run dev -- --port 43123
 
 Open [http://127.0.0.1:43123](http://127.0.0.1:43123).
 
-The dev server listens on `0.0.0.0`. The first visit loads the IT roster and six sample projects. Edits stay in `localStorage` under `keel.desk.v2`. **Reset demo data** in the sidebar restores that sample.
+The dev server listens on `0.0.0.0`. A first visit, with nothing saved in this browser, loads the 20-person IT roster (including Ahmed Salam, CTO) and starts with no projects and no tasks. A desk already saved under `keel.desk.v2` is left as it is.
 
 ## Roster
 

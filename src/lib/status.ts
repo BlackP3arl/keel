@@ -38,6 +38,7 @@ export function shownProgress(tasks: Task[], health: Health): number {
 
 export function isTaskOverdue(task: Task, today: Date): boolean {
   if (task.status === "done") return false;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(task.due)) return false;
   return isPastDue(task.due, today);
 }
 

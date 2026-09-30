@@ -25,11 +25,49 @@ export function daysBetween(from: Date, to: Date): number {
   return Math.round(ms / 86_400_000);
 }
 
+export function isISODate(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+/** Friday and Saturday. Sunday through Thursday are ordinary days. */
+export function isWeekend(date: Date): boolean {
+  const day = date.getDay();
+  return day === 5 || day === 6;
+}
+
+/** Inclusive calendar days. A same-day range is 1. */
+export function inclusiveDays(startIso: string, dueIso: string): number {
+  return daysBetween(parseISODate(startIso), parseISODate(dueIso)) + 1;
+}
+
+/** Due date for an inclusive duration. 1 day keeps the start date. */
+export function dueFromDuration(startIso: string, durationDays: number): string {
+  return formatISODate(addDays(parseISODate(startIso), durationDays - 1));
+}
+
 export function formatShort(iso: string): string {
+  if (!isISODate(iso)) return "—";
   return parseISODate(iso).toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
   });
+}
+
+const WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
+
+/** Compact board date: Today, Tomorrow, a weekday this week (Fri), otherwise Oct 27. */
+export function formatBoardDue(iso: string, today: Date): string {
+  if (!isISODate(iso)) return "—";
+  const due = startOfDay(parseISODate(iso));
+  const now = startOfDay(today);
+  const delta = daysBetween(now, due);
+  if (delta === 0) return "Today";
+  if (delta === 1) return "Tomorrow";
+  const weekEnd = addDays(now, 6 - now.getDay());
+  if (delta > 1 && due.getTime() <= weekEnd.getTime()) {
+    return WEEKDAY_SHORT[due.getDay()];
+  }
+  return formatShort(iso);
 }
 
 export function formatMedium(iso: string): string {

@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -53,6 +55,34 @@ export function LabeledSelect({
           ))}
         </SelectContent>
       </Select>
+    </div>
+  );
+}
+
+export function SearchField({
+  value,
+  onValueChange,
+  placeholder,
+  testId,
+  label = "Search",
+}: {
+  value: string;
+  onValueChange: (value: string) => void;
+  placeholder: string;
+  testId?: string;
+  label?: string;
+}) {
+  return (
+    <div className="grid gap-1">
+      <span className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">{label}</span>
+      <Input
+        value={value}
+        onChange={(event) => onValueChange(event.target.value)}
+        placeholder={placeholder}
+        aria-label={label}
+        data-testid={testId}
+        className="w-full sm:w-56"
+      />
     </div>
   );
 }
@@ -121,6 +151,103 @@ export function PersonSelect({
         </SelectContent>
       </Select>
       {selected ? (
+        <p className="text-xs text-muted-foreground">
+          {selected.department} · {selected.role}
+          {selected.email ? <span className="block">{selected.email}</span> : null}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+export function AssigneeSearch({
+  value,
+  onValueChange,
+  developers,
+}: {
+  value: string;
+  onValueChange: (developerId: string) => void;
+  developers: Developer[];
+}) {
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const selected = developers.find((person) => person.id === value);
+  const needle = query.trim().toLowerCase();
+  const matches = developers.filter((person) => person.name.toLowerCase().includes(needle));
+
+  function choose(developerId: string) {
+    onValueChange(developerId);
+    setQuery("");
+    setOpen(false);
+  }
+
+  return (
+    <div className="grid gap-1.5" data-field="assignee">
+      <span className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Assignee</span>
+      <Input
+        role="combobox"
+        aria-expanded={open}
+        aria-autocomplete="list"
+        aria-controls="assignee-results"
+        placeholder="Search by name"
+        data-testid="task-assignee"
+        value={open ? query : (selected?.name ?? "")}
+        onFocus={() => {
+          setOpen(true);
+          setQuery("");
+        }}
+        onChange={(event) => {
+          setQuery(event.target.value);
+          setOpen(true);
+        }}
+        onBlur={() => {
+          window.setTimeout(() => setOpen(false), 120);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            setOpen(false);
+            return;
+          }
+          if (event.key === "Enter" && open) {
+            event.preventDefault();
+            const first = matches[0];
+            if (first) choose(first.id);
+          }
+        }}
+      />
+      {open ? (
+        <ul
+          id="assignee-results"
+          role="listbox"
+          data-testid="assignee-results"
+          className="max-h-48 overflow-y-auto rounded-lg border border-border bg-popover"
+        >
+          {matches.length === 0 ? (
+            <li className="px-2.5 py-2 text-sm text-muted-foreground">No one on the roster matches.</li>
+          ) : (
+            matches.map((person) => (
+              <li key={person.id}>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={person.id === value}
+                  data-testid="assignee-option"
+                  data-person-id={person.id}
+                  className="flex w-full flex-col items-start px-2.5 py-1.5 text-left hover:bg-muted"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => choose(person.id)}
+                >
+                  <span className="text-sm font-medium">{person.name}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {person.department} · {person.role}
+                  </span>
+                </button>
+              </li>
+            ))
+          )}
+        </ul>
+      ) : null}
+      {selected && !open ? (
         <p className="text-xs text-muted-foreground">
           {selected.department} · {selected.role}
           {selected.email ? <span className="block">{selected.email}</span> : null}

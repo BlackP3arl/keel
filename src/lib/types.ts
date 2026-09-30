@@ -38,6 +38,8 @@ export type Project = {
   due: string;
   predecessorProjectId: string | null;
   ownerId: string;
+  /** Set when the project, or a task or comment on it, is created or edited. */
+  updatedAt?: string;
 };
 
 export type Task = {
@@ -50,6 +52,9 @@ export type Task = {
   due: string;
   predecessorTaskId: string | null;
   priority: Priority;
+  createdAt?: string;
+  /** Set when the task is created or edited, including status, dates, assignee, and comments. */
+  updatedAt?: string;
 };
 
 /** A note on a task. `authorId` is a roster person id, same as task assignees. */

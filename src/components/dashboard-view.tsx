@@ -5,7 +5,8 @@ import { useMemo, useState } from "react";
 import { Info, Plus } from "lucide-react";
 import { HealthBadge } from "@/components/badges";
 import { ProjectDialog } from "@/components/editors";
-import { PageHeader } from "@/components/page-header";
+import { EmptyState, PageHeader } from "@/components/page-header";
+import { SearchField } from "@/components/pickers";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -24,6 +25,7 @@ const HEALTHS: Health[] = ["on_track", "off_track", "on_hold", "done"];
 export function DashboardView() {
   const desk = useDesk();
   const [creating, setCreating] = useState(false);
+  const [query, setQuery] = useState("");
   const today = useMemo(() => new Date(), []);
 
   const rows = useMemo(() => {
@@ -49,6 +51,14 @@ export function DashboardView() {
   const counts = Object.fromEntries(
     HEALTHS.map((health) => [health, rows.filter((row) => row.health === health).length]),
   ) as Record<Health, number>;
+
+  const needle = query.trim().toLowerCase();
+  const visibleRows = needle
+    ? rows.filter((row) => {
+        if (row.project.name.toLowerCase().includes(needle)) return true;
+        return row.tasks.some((task) => task.title.toLowerCase().includes(needle));
+      })
+    : rows;
 
   return (
     <div data-testid="dashboard">
@@ -89,8 +99,33 @@ export function DashboardView() {
         ))}
       </div>
 
+      <div className="mb-4">
+        <SearchField
+          value={query}
+          onValueChange={setQuery}
+          placeholder="Project or task"
+          testId="dashboard-search"
+        />
+      </div>
+
+      {desk.projects.length === 0 ? (
+        <EmptyState
+          title="No projects yet"
+          body="Create a project to put work on the desk."
+          action={
+            <Button onClick={() => setCreating(true)}>
+              <Plus />
+              New project
+            </Button>
+          }
+        />
+      ) : visibleRows.length === 0 ? (
+        <p className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
+          No projects match that search.
+        </p>
+      ) : (
       <div className="grid gap-2">
-        {rows.map((row) => {
+        {visibleRows.map((row) => {
           const percent = Math.round(row.progress * 100);
           return (
             <Link
@@ -127,6 +162,7 @@ export function DashboardView() {
           );
         })}
       </div>
+      )}
 
       <ProjectDialog open={creating} onOpenChange={setCreating} />
     </div>

@@ -4,9 +4,10 @@ import { useMemo, useRef, useState } from "react";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
 import { PriorityMark, TaskStatusBadge } from "@/components/badges";
+import { CreateProjectPrompt } from "@/components/create-project-prompt";
 import { TaskDialog } from "@/components/editors";
 import { EmptyState, PageHeader } from "@/components/page-header";
-import { LabeledSelect, PersonSelect } from "@/components/pickers";
+import { LabeledSelect, PersonSelect, SearchField } from "@/components/pickers";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -56,6 +57,7 @@ export function TaskTable({
   const [assignee, setAssignee] = useState("all");
   const [status, setStatus] = useState("all");
   const [priority, setPriority] = useState("all");
+  const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("due");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [editing, setEditing] = useState<Task | null>(null);
@@ -66,12 +68,17 @@ export function TaskTable({
   const lockedProject = projectId ?? (filterProject === "all" ? undefined : filterProject);
 
   const rows = useMemo(() => {
+    const needle = query.trim().toLowerCase();
     const filtered = desk.tasks.filter((task) => {
       if (projectId && task.projectId !== projectId) return false;
       if (!projectId && filterProject !== "all" && task.projectId !== filterProject) return false;
       if (assignee !== "all" && task.assigneeId !== assignee) return false;
       if (status !== "all" && task.status !== status) return false;
       if (priority !== "all" && task.priority !== priority) return false;
+      if (needle) {
+        const projectName = desk.projectById.get(task.projectId)?.name ?? "";
+        if (!task.title.toLowerCase().includes(needle) && !projectName.toLowerCase().includes(needle)) return false;
+      }
       return true;
     });
 
@@ -108,6 +115,7 @@ export function TaskTable({
     filterProject,
     priority,
     projectId,
+    query,
     sortDir,
     sortKey,
     status,
@@ -147,7 +155,12 @@ export function TaskTable({
   }, [desk.comments]);
 
   const projectTasks = projectId ? desk.tasks.filter((task) => task.projectId === projectId) : desk.tasks;
-  const filtersActive = assignee !== "all" || status !== "all" || priority !== "all" || (!projectId && filterProject !== "all");
+  const filtersActive =
+    query.trim().length > 0 ||
+    assignee !== "all" ||
+    status !== "all" ||
+    priority !== "all" ||
+    (!projectId && filterProject !== "all");
 
   return (
     <div data-testid="task-list">
@@ -163,6 +176,12 @@ export function TaskTable({
       />
 
       <div className="mb-4 flex flex-wrap gap-3">
+        <SearchField
+          value={query}
+          onValueChange={setQuery}
+          placeholder="Task or project"
+          testId="task-search"
+        />
         {projectId ? null : (
           <LabeledSelect
             label="Project"
@@ -209,6 +228,7 @@ export function TaskTable({
             variant="outline"
             className="self-end"
             onClick={() => {
+              setQuery("");
               setAssignee("all");
               setStatus("all");
               setPriority("all");
@@ -220,7 +240,9 @@ export function TaskTable({
         ) : null}
       </div>
 
-      {rows.length === 0 ? (
+      {!projectId && desk.projects.length === 0 ? (
+        <CreateProjectPrompt body="Create a project, then add the tasks that belong to it." />
+      ) : rows.length === 0 ? (
         <EmptyState
           title={projectTasks.length === 0 ? "No tasks yet" : "Nothing matches these filters"}
           body={
@@ -233,6 +255,7 @@ export function TaskTable({
               <Button
                 variant="outline"
                 onClick={() => {
+                  setQuery("");
                   setAssignee("all");
                   setStatus("all");
                   setPriority("all");

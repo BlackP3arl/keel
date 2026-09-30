@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { PersonSelect, PredecessorSelect } from "@/components/pickers";
+import { DateRangeField } from "@/components/date-range-field";
+import { AssigneeSearch, LabeledSelect, PersonSelect, PredecessorSelect } from "@/components/pickers";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -15,12 +16,11 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { LabeledSelect } from "@/components/pickers";
-import { addDays, formatISODate, startOfDay } from "@/lib/dates";
+import { addDays, formatISODate, isISODate, startOfDay } from "@/lib/dates";
 import { PRIORITIES, PRIORITY_LABEL, PROJECT_STATUS_LABEL, TASK_STATUSES, TASK_STATUS_LABEL } from "@/lib/labels";
 import { wouldCreateCycle } from "@/lib/links";
 import { useDesk } from "@/lib/store";
-import type { Priority, Project, ProjectStatus, Task, TaskStatus } from "@/lib/types";
+import type { Developer, Priority, Project, ProjectStatus, Task, TaskStatus } from "@/lib/types";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -50,6 +50,21 @@ function projectOptions(
       );
     })
     .map((project) => ({ value: project.id, label: project.name }));
+}
+
+function ownerAssignee(projects: Project[], developers: Developer[], projectId: string): string {
+  const ownerId = projects.find((project) => project.id === projectId)?.ownerId ?? "";
+  return developers.some((person) => person.id === ownerId) ? ownerId : "";
+}
+
+/** Start on the latest task's due date. No due date on that task means today. */
+function defaultStartForProject(tasks: Task[], projectId: string, today: string): string {
+  for (let index = tasks.length - 1; index >= 0; index -= 1) {
+    const task = tasks[index];
+    if (task.projectId !== projectId) continue;
+    return isISODate(task.due) ? task.due : today;
+  }
+  return today;
 }
 
 function taskOptions(tasks: Task[], projectId: string, currentId: string | null) {
@@ -230,24 +245,202 @@ export function TaskDialog({
   onOpenChange,
   task,
   defaultProjectId,
+  defaultStatus,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   task?: Task | null;
   defaultProjectId?: string;
+  defaultStatus?: TaskStatus;
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[min(85vh,52rem)] overflow-y-auto sm:max-w-lg">
+      <DialogContent
+        className="max-h-[min(92vh,80rem)] overflow-y-auto sm:max-w-lg"
+        initialFocus={
+          task
+            ? undefined
+            : () => document.querySelector<HTMLElement>("[data-testid='task-title']")
+        }
+      >
         {open ? (
-          <TaskForm
-            task={task ?? null}
-            defaultProjectId={defaultProjectId}
-            onClose={() => onOpenChange(false)}
-          />
+          task ? (
+            <TaskForm task={task} onClose={() => onOpenChange(false)} />
+          ) : (
+            <NewTaskForm
+              defaultProjectId={defaultProjectId}
+              defaultStatus={defaultStatus}
+              onClose={() => onOpenChange(false)}
+            />
+          )
         ) : null}
       </DialogContent>
     </Dialog>
+  );
+}
+
+function NewTaskForm({
+  defaultProjectId,
+  defaultStatus,
+  onClose,
+}: {
+  defaultProjectId?: string;
+  defaultStatus?: TaskStatus;
+  onClose: () => void;
+}) {
+  const desk = useDesk();
+  const today = formatISODate(startOfDay(new Date()));
+  const initialProjectId = defaultProjectId ?? desk.projects[0]?.id ?? "";
+  const titleRef = useRef<HTMLInputElement>(null);
+  const [title, setTitle] = useState("");
+  const [projectId, setProjectId] = useState(initialProjectId);
+  const [assigneeId, setAssigneeId] = useState(() => ownerAssignee(desk.projects, desk.developers, initialProjectId));
+  const [status, setStatus] = useState<TaskStatus>(defaultStatus ?? "todo");
+  const [priority, setPriority] = useState<Priority>("medium");
+  const [start, setStart] = useState(() => defaultStartForProject(desk.tasks, initialProjectId, today));
+  const [due, setDue] = useState("");
+  const [duration, setDuration] = useState("");
+  const [predecessorTaskId, setPredecessorTaskId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useLayoutEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      titleRef.current?.focus();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
+  const predecessorChoices = taskOptions(desk.tasks, projectId, null);
+  const projectName = desk.projects.find((project) => project.id === projectId)?.name ?? "";
+
+  function changeProject(nextProjectId: string) {
+    setProjectId(nextProjectId);
+    setAssigneeId(ownerAssignee(desk.projects, desk.developers, nextProjectId));
+    setStart(defaultStartForProject(desk.tasks, nextProjectId, today));
+    setDue("");
+    setDuration("");
+    setPredecessorTaskId(null);
+  }
+
+  function save() {
+    const result = desk.createTask({
+      title,
+      projectId,
+      assigneeId,
+      status,
+      priority,
+      start,
+      due,
+      predecessorTaskId,
+    });
+    if (!result.ok) {
+      setError(result.reason);
+      return;
+    }
+    toast("Task added.");
+    onClose();
+  }
+
+  return (
+    <>
+      <DialogHeader>
+        <DialogTitle>New task</DialogTitle>
+        <DialogDescription>
+          The assignee starts as this project’s owner. A predecessor has to be another task on the same project, and it cannot loop.
+        </DialogDescription>
+      </DialogHeader>
+      <form
+        className="grid gap-3"
+        data-testid="new-task-form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          save();
+        }}
+      >
+        <div data-field="project">
+          <LabeledSelect
+            label="Project"
+            value={projectId}
+            onValueChange={changeProject}
+            options={desk.projects.map((item) => ({ value: item.id, label: item.name }))}
+            testId="task-project"
+            full
+          />
+          <p className="sr-only" data-testid="task-project-name">
+            {projectName}
+          </p>
+        </div>
+        <div data-field="title">
+          <Field label="Title">
+            <Input
+              ref={titleRef}
+              autoFocus
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              required
+              data-testid="task-title"
+            />
+          </Field>
+        </div>
+        <div data-field="dates">
+          <DateRangeField
+            key={projectId}
+            start={start}
+            due={due}
+            duration={duration}
+            onChange={(next) => {
+              setStart(next.start);
+              setDue(next.due);
+              setDuration(next.duration);
+            }}
+          />
+        </div>
+        <AssigneeSearch value={assigneeId} onValueChange={setAssigneeId} developers={desk.developers} />
+        <div data-field="status">
+          <LabeledSelect
+            label="Status"
+            value={status}
+            onValueChange={(next) => setStatus(next as TaskStatus)}
+            options={TASK_STATUSES.map((item) => ({ value: item, label: TASK_STATUS_LABEL[item] }))}
+            testId="task-status"
+            full
+          />
+        </div>
+        <div data-field="priority">
+          <LabeledSelect
+            label="Priority"
+            value={priority}
+            onValueChange={(next) => setPriority(next as Priority)}
+            options={PRIORITIES.map((item) => ({ value: item, label: PRIORITY_LABEL[item] }))}
+            testId="task-priority"
+            full
+          />
+        </div>
+        <div data-field="predecessor">
+          <PredecessorSelect
+            label="Predecessor task"
+            value={predecessorTaskId}
+            onValueChange={setPredecessorTaskId}
+            options={predecessorChoices}
+            hint="Tasks that would loop back to this one are hidden."
+            testId="task-predecessor"
+          />
+        </div>
+        {error ? (
+          <p role="alert" className="text-sm text-destructive">
+            {error}
+          </p>
+        ) : null}
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" data-testid="task-save">
+            Create task
+          </Button>
+        </DialogFooter>
+      </form>
+    </>
   );
 }
 
