@@ -19,7 +19,7 @@ export type Department =
 /**
  * Person on the IT roster. `id` is stable and is what projects and tasks store.
  * `email` is kept so a later Google sign-in can match this person without moving work.
- * v1 has no login. Designation is stored as `role`.
+ * Designation is stored as `role`. Google sign-in is matched by email, not by this id.
  */
 export type Developer = {
   id: string;

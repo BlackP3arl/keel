@@ -46,7 +46,7 @@ export function ensureSeededRoster(current: Developer[]): Developer[] {
 }
 
 /**
- * Used only when this browser has no saved desk.
+ * Used only when the server has never stored a desk.
  * The roster is real. Projects and tasks start empty so a first visit is a blank desk.
  */
 export function seedData(): DeskState {
