@@ -1,61 +1,55 @@
-import { neon } from "@neondatabase/serverless";
+import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { parseDesk } from "@/lib/desk-parse";
 import type { DeskState } from "@/lib/types";
 
 const DESK_ID = "default";
 
-type Sql = ReturnType<typeof neon>;
+/** Minimal D1 surface used by the desk. Tests can pass an in-memory stand-in. */
+export type D1Like = {
+  prepare(query: string): {
+    bind(...values: unknown[]): {
+      first<T extends Record<string, unknown>>(): Promise<T | null>;
+      run(): Promise<unknown>;
+    };
+  };
+};
 
-let sqlClient: Sql | null = null;
-let tableReady = false;
-
-function databaseUrl(): string {
-  const url = process.env.DATABASE_URL;
-  if (!url) {
-    throw new Error("DATABASE_URL is not set. Add Neon in the Vercel Marketplace and pull env vars.");
+export function decodeStoredData(data: unknown): unknown {
+  if (typeof data !== "string") return data;
+  try {
+    return JSON.parse(data) as unknown;
+  } catch {
+    return data;
   }
-  return url;
 }
 
-function sql(): Sql {
-  if (!sqlClient) sqlClient = neon(databaseUrl());
-  return sqlClient;
-}
-
-async function ensureTable(): Promise<Sql> {
-  const client = sql();
-  if (!tableReady) {
-    await client.query(
-      `CREATE TABLE IF NOT EXISTS keel_desk (
-        id TEXT PRIMARY KEY,
-        data JSONB NOT NULL,
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-      )`,
-    );
-    tableReady = true;
+async function getD1(): Promise<D1Like> {
+  const { env } = await getCloudflareContext({ async: true });
+  const db = env.DB;
+  if (!db) {
+    throw new Error("Cloudflare D1 binding DB is missing. Bind the `keel` database as DB.");
   }
-  return client;
+  return db;
 }
 
 /** `null` means the server has never stored a desk. */
-export async function getStoredDesk(): Promise<unknown | null> {
-  const client = await ensureTable();
-  const rows = (await client.query("SELECT data FROM keel_desk WHERE id = $1", [DESK_ID])) as Array<{
-    data?: unknown;
-  }>;
-  const row = rows[0];
-  if (!row) return null;
-  return row.data ?? null;
+export async function getStoredDesk(db?: D1Like): Promise<unknown | null> {
+  const client = db ?? (await getD1());
+  const row = await client.prepare("SELECT data FROM keel_desk WHERE id = ?").bind(DESK_ID).first<{ data?: unknown }>();
+  if (!row || row.data == null) return null;
+  return decodeStoredData(row.data);
 }
 
-export async function saveStoredDesk(desk: DeskState): Promise<void> {
+export async function saveStoredDesk(desk: DeskState, db?: D1Like): Promise<void> {
   const parsed = parseDesk(desk);
   if (!parsed.ok) throw new Error(parsed.reason);
-  const client = await ensureTable();
-  await client.query(
-    `INSERT INTO keel_desk (id, data, updated_at)
-     VALUES ($1, $2::jsonb, now())
-     ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_at = now()`,
-    [DESK_ID, JSON.stringify(parsed.desk)],
-  );
+  const client = db ?? (await getD1());
+  await client
+    .prepare(
+      `INSERT INTO keel_desk (id, data, updated_at)
+       VALUES (?, ?, datetime('now'))
+       ON CONFLICT(id) DO UPDATE SET data = excluded.data, updated_at = datetime('now')`,
+    )
+    .bind(DESK_ID, JSON.stringify(parsed.desk))
+    .run();
 }
