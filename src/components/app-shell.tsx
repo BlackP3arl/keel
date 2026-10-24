@@ -7,6 +7,7 @@ import {
   ChartGantt,
   Columns3,
   Contact,
+  FolderKanban,
   LayoutDashboard,
   ListChecks,
   Menu,
@@ -28,6 +29,7 @@ import { cn } from "cn";
 
 const NAV: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/projects", label: "Projects", icon: FolderKanban },
   { href: "/kanban", label: "Kanban", icon: Columns3 },
   { href: "/gantt", label: "Timeline", icon: ChartGantt },
   { href: "/tasks", label: "Tasks", icon: ListChecks },

@@ -29,7 +29,7 @@ npm test
 npm run build
 ```
 
-`npm run build` is the Next.js build. Cloudflare deploy runs that, then OpenNext, then Wrangler.
+`npm run build` is the Next.js production build (`next build --webpack`). Webpack is required so `next/font/google` resolves on Cloudflare; Turbopack fails with `@vercel/turbopack-next/internal/font/google/font`. `npm run deploy` runs that build through OpenNext, then `wrangler deploy`.
 
 ## Roster
 
@@ -132,7 +132,7 @@ export CLOUDFLARE_ACCOUNT_ID=...
 npm run deploy
 ```
 
-That runs `opennextjs-cloudflare build` (which calls `next build`) and then `wrangler deploy --keep-vars`. No Wrangler login prompt.
+That runs `opennextjs-cloudflare build` (which calls `next build --webpack`) and then `wrangler deploy --keep-vars`. No Wrangler login prompt. Preview URLs are off (`preview_urls: false`); `workers.dev` stays on.
 
 ### 5. Google OAuth client
 

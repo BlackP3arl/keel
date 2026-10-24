@@ -39,8 +39,8 @@ export function ProjectDetail() {
         title="That project is not on the desk"
         body="It may have been deleted in this browser."
         action={
-          <Link href="/" className={buttonVariants({ variant: "outline" })}>
-            Back to the dashboard
+          <Link href="/projects" className={buttonVariants({ variant: "outline" })}>
+            Back to projects
           </Link>
         }
       />
@@ -88,9 +88,9 @@ export function ProjectDetail() {
 
   return (
     <div data-testid="project-detail" data-project-id={project.id}>
-      <Link href="/" className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+      <Link href="/projects" className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="size-4" />
-        Dashboard
+        Projects
       </Link>
 
       <div className="flex flex-wrap items-start justify-between gap-3">
