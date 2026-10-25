@@ -11,9 +11,11 @@ import {
   LayoutDashboard,
   ListChecks,
   Menu,
+  UserCog,
   Users,
   type LucideIcon,
 } from "lucide-react";
+import { useSession } from "next-auth/react";
 import { DeskAccount, DeskBanners, LocalImportDialog } from "@/components/desk-status";
 import { ViewErrorBoundary } from "@/components/view-error-boundary";
 import { Separator } from "@/components/ui/separator";
@@ -39,10 +41,13 @@ const NAV: { href: string; label: string; icon: LucideIcon }[] = [
 
 function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
+  const session = useSession();
+  const isAdmin = session.data?.user?.role === "admin";
+  const items = isAdmin ? [...NAV, { href: "/users", label: "Users", icon: UserCog }] : NAV;
 
   return (
     <nav className="grid gap-1" aria-label="Desk">
-      {NAV.map((item) => {
+      {items.map((item) => {
         const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
         const Icon = item.icon;
         return (

@@ -66,10 +66,12 @@ export function DashboardView() {
         title="Delivery desk"
         lede={`${formatDayHeading(today)}. ${desk.developers.length} people, ${desk.projects.length} projects. On track and off track are calculated from dates and finished tasks.`}
         action={
-          <Button onClick={() => setCreating(true)}>
-            <Plus />
-            New project
-          </Button>
+          desk.canWrite ? (
+            <Button onClick={() => setCreating(true)}>
+              <Plus />
+              New project
+            </Button>
+          ) : undefined
         }
       />
 
@@ -113,10 +115,12 @@ export function DashboardView() {
           title="No projects yet"
           body="Create a project to put work on the desk."
           action={
-            <Button onClick={() => setCreating(true)}>
-              <Plus />
-              New project
-            </Button>
+            desk.canWrite ? (
+              <Button onClick={() => setCreating(true)}>
+                <Plus />
+                New project
+              </Button>
+            ) : undefined
           }
         />
       ) : visibleRows.length === 0 ? (

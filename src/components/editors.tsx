@@ -155,11 +155,12 @@ function ProjectForm({ project, onClose }: { project: Project | null; onClose: (
         className="grid gap-3"
         onSubmit={(event) => {
           event.preventDefault();
+          if (!desk.canWrite) return;
           save();
         }}
       >
         <Field label="Name">
-          <Input value={name} onChange={(event) => setName(event.target.value)} required />
+          <Input value={name} onChange={(event) => setName(event.target.value)} required disabled={!desk.canWrite} />
         </Field>
         <Field label="Summary">
           <Textarea
@@ -167,6 +168,7 @@ function ProjectForm({ project, onClose }: { project: Project | null; onClose: (
             onChange={(event) => setSummary(event.target.value)}
             rows={3}
             className="normal-case"
+            disabled={!desk.canWrite}
           />
         </Field>
         <LabeledSelect
@@ -177,13 +179,14 @@ function ProjectForm({ project, onClose }: { project: Project | null; onClose: (
             value: item,
             label: PROJECT_STATUS_LABEL[item],
           }))}
+          disabled={!desk.canWrite}
         />
         <div className="grid grid-cols-2 gap-3">
           <Field label="Start">
-            <Input type="date" value={start} onChange={(event) => setStart(event.target.value)} required />
+            <Input type="date" value={start} onChange={(event) => setStart(event.target.value)} required disabled={!desk.canWrite} />
           </Field>
           <Field label="Due">
-            <Input type="date" value={due} onChange={(event) => setDue(event.target.value)} required />
+            <Input type="date" value={due} onChange={(event) => setDue(event.target.value)} required disabled={!desk.canWrite} />
           </Field>
         </div>
         <PersonSelect
@@ -192,6 +195,7 @@ function ProjectForm({ project, onClose }: { project: Project | null; onClose: (
           onValueChange={setOwnerId}
           developers={desk.developers}
           testId="project-owner"
+          disabled={!desk.canWrite}
         />
         <PredecessorSelect
           label="Predecessor project"
@@ -200,6 +204,7 @@ function ProjectForm({ project, onClose }: { project: Project | null; onClose: (
           options={options}
           hint="Projects that would loop back to this one are hidden."
           testId="project-predecessor"
+          disabled={!desk.canWrite}
         />
         {error ? (
           <p role="alert" className="text-sm text-destructive">
@@ -207,7 +212,7 @@ function ProjectForm({ project, onClose }: { project: Project | null; onClose: (
           </p>
         ) : null}
         <DialogFooter className="sm:justify-between">
-          {project ? (
+          {project && desk.canWrite ? (
             <Button type="button" variant="destructive" onClick={() => setConfirmDelete(true)}>
               Delete
             </Button>
@@ -216,9 +221,9 @@ function ProjectForm({ project, onClose }: { project: Project | null; onClose: (
           )}
           <div className="flex gap-2">
             <Button type="button" variant="outline" onClick={onClose}>
-              Cancel
+              {desk.canWrite ? "Cancel" : "Close"}
             </Button>
-            <Button type="submit">{project ? "Save" : "Create project"}</Button>
+            {desk.canWrite ? <Button type="submit">{project ? "Save" : "Create project"}</Button> : null}
           </div>
         </DialogFooter>
       </form>
@@ -513,11 +518,12 @@ function TaskForm({
         className="grid gap-3"
         onSubmit={(event) => {
           event.preventDefault();
+          if (!desk.canWrite) return;
           save();
         }}
       >
         <Field label="Title">
-          <Input value={title} onChange={(event) => setTitle(event.target.value)} required data-testid="task-title" />
+          <Input value={title} onChange={(event) => setTitle(event.target.value)} required data-testid="task-title" disabled={!desk.canWrite} />
         </Field>
         <LabeledSelect
           label="Project"
@@ -526,6 +532,7 @@ function TaskForm({
           options={desk.projects.map((item) => ({ value: item.id, label: item.name }))}
           testId="task-project"
           full
+          disabled={!desk.canWrite}
         />
         <PersonSelect
           label="Assignee"
@@ -533,6 +540,7 @@ function TaskForm({
           onValueChange={setAssigneeId}
           developers={desk.developers}
           testId="task-assignee"
+          disabled={!desk.canWrite}
         />
         <div className="grid gap-3 sm:grid-cols-2">
           <LabeledSelect
@@ -540,20 +548,22 @@ function TaskForm({
             value={status}
             onValueChange={(next) => setStatus(next as TaskStatus)}
             options={TASK_STATUSES.map((item) => ({ value: item, label: TASK_STATUS_LABEL[item] }))}
+            disabled={!desk.canWrite}
           />
           <LabeledSelect
             label="Priority"
             value={priority}
             onValueChange={(next) => setPriority(next as Priority)}
             options={PRIORITIES.map((item) => ({ value: item, label: PRIORITY_LABEL[item] }))}
+            disabled={!desk.canWrite}
           />
         </div>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Start">
-            <Input type="date" value={start} onChange={(event) => setStart(event.target.value)} required />
+            <Input type="date" value={start} onChange={(event) => setStart(event.target.value)} required disabled={!desk.canWrite} />
           </Field>
           <Field label="Due">
-            <Input type="date" value={due} onChange={(event) => setDue(event.target.value)} required data-testid="task-due" />
+            <Input type="date" value={due} onChange={(event) => setDue(event.target.value)} required data-testid="task-due" disabled={!desk.canWrite} />
           </Field>
         </div>
         <PredecessorSelect
@@ -563,6 +573,7 @@ function TaskForm({
           options={predecessorChoices}
           hint="Tasks that would loop back to this one are hidden."
           testId="task-predecessor"
+          disabled={!desk.canWrite}
         />
         {error ? (
           <p role="alert" className="text-sm text-destructive">
@@ -570,7 +581,7 @@ function TaskForm({
           </p>
         ) : null}
         <DialogFooter className="sm:justify-between">
-          {task ? (
+          {task && desk.canWrite ? (
             <Button type="button" variant="destructive" onClick={() => setConfirmDelete(true)}>
               Delete
             </Button>
@@ -579,11 +590,13 @@ function TaskForm({
           )}
           <div className="flex gap-2">
             <Button type="button" variant="outline" onClick={onClose}>
-              Cancel
+              {desk.canWrite ? "Cancel" : "Close"}
             </Button>
-            <Button type="submit" data-testid="task-save">
-              {task ? "Save" : "Create task"}
-            </Button>
+            {desk.canWrite ? (
+              <Button type="submit" data-testid="task-save">
+                {task ? "Save" : "Create task"}
+              </Button>
+            ) : null}
           </div>
         </DialogFooter>
       </form>
@@ -659,18 +672,20 @@ function TaskComments({ task }: { task: Task }) {
                     {author ? <span> · {author.department}</span> : null}
                     <span> · {formatCommentTime(comment.createdAt)}</span>
                   </p>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="xs"
-                    data-testid="comment-delete"
-                    onClick={() => {
-                      desk.deleteComment(comment.id);
-                      toast("Comment deleted.");
-                    }}
-                  >
-                    Delete
-                  </Button>
+                  {desk.canWrite ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="xs"
+                      data-testid="comment-delete"
+                      onClick={() => {
+                        desk.deleteComment(comment.id);
+                        toast("Comment deleted.");
+                      }}
+                    >
+                      Delete
+                    </Button>
+                  ) : null}
                 </div>
                 <p className="mt-1 text-sm whitespace-pre-wrap">{comment.body}</p>
               </li>
@@ -678,6 +693,7 @@ function TaskComments({ task }: { task: Task }) {
           })}
         </ol>
       )}
+      {desk.canWrite ? (
       <form
         className="grid gap-3"
         onSubmit={(event) => {
@@ -712,6 +728,7 @@ function TaskComments({ task }: { task: Task }) {
           </Button>
         </div>
       </form>
+      ) : null}
     </section>
   );
 }

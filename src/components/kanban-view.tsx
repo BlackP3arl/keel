@@ -112,10 +112,12 @@ export function KanbanView() {
         title="Kanban"
         lede="Drag a card into another column to change its status. Overdue dates stay red."
         action={
-          <Button onClick={() => setCreating("todo")}>
-            <Plus />
-            New task
-          </Button>
+          desk.canWrite ? (
+            <Button onClick={() => setCreating("todo")}>
+              <Plus />
+              New task
+            </Button>
+          ) : undefined
         }
       />
       <div className="mb-4 shrink-0">
@@ -144,10 +146,12 @@ export function KanbanView() {
               : "This project has no tasks yet. Add one, or switch the filter back to all projects."
           }
           action={
-            <Button onClick={() => setCreating("todo")}>
-              <Plus />
-              New task
-            </Button>
+            desk.canWrite ? (
+              <Button onClick={() => setCreating("todo")}>
+                <Plus />
+                New task
+              </Button>
+            ) : undefined
           }
         />
       ) : null}
@@ -155,9 +159,9 @@ export function KanbanView() {
       <DndContext
         sensors={sensors}
         collisionDetection={collision}
-        onDragStart={(event: DragStartEvent) => setActiveId(String(event.active.id))}
-        onDragCancel={() => setActiveId(null)}
-        onDragEnd={onDragEnd}
+        onDragStart={desk.canWrite ? (event: DragStartEvent) => setActiveId(String(event.active.id)) : undefined}
+        onDragCancel={desk.canWrite ? () => setActiveId(null) : undefined}
+        onDragEnd={desk.canWrite ? onDragEnd : undefined}
       >
         <div
           className={cn(
@@ -175,6 +179,7 @@ export function KanbanView() {
               today={today}
               onOpen={setEditing}
               onAdd={setCreating}
+              canWrite={desk.canWrite}
             />
           ))}
         </div>
@@ -204,12 +209,14 @@ function Column({
   today,
   onOpen,
   onAdd,
+  canWrite,
 }: {
   status: TaskStatus;
   tasks: Task[];
   today: Date;
   onOpen: (task: Task) => void;
   onAdd: (status: TaskStatus) => void;
+  canWrite: boolean;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
   const tone = COLUMN_TONE[status];
@@ -241,21 +248,23 @@ function Column({
       <div ref={setNodeRef} className="flex min-h-0 flex-1 flex-col">
         <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-0.5">
           {tasks.map((task) => (
-            <TaskCard key={task.id} task={task} today={today} onOpen={onOpen} />
+            <TaskCard key={task.id} task={task} today={today} onOpen={onOpen} canWrite={canWrite} />
           ))}
         </div>
-        <button
-          type="button"
-          className={cn(
-            "mt-1 flex w-full shrink-0 items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-[13px] font-medium hover:bg-white/5",
-            tone.ink,
-          )}
-          data-testid={`add-task-${status}`}
-          onClick={() => onAdd(status)}
-        >
-          <Plus className="size-3.5" aria-hidden />
-          Add task
-        </button>
+        {canWrite ? (
+          <button
+            type="button"
+            className={cn(
+              "mt-1 flex w-full shrink-0 items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-[13px] font-medium hover:bg-white/5",
+              tone.ink,
+            )}
+            data-testid={`add-task-${status}`}
+            onClick={() => onAdd(status)}
+          >
+            <Plus className="size-3.5" aria-hidden />
+            Add task
+          </button>
+        ) : null}
       </div>
     </section>
   );
@@ -265,12 +274,14 @@ function TaskCard({
   task,
   today,
   onOpen,
+  canWrite,
 }: {
   task: Task;
   today: Date;
   onOpen: (task: Task) => void;
+  canWrite: boolean;
 }) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: task.id });
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: task.id, disabled: !canWrite });
   const origin = useRef<{ x: number; y: number } | null>(null);
   const style = { transform: CSS.Translate.toString(transform) };
   const { onPointerDown, ...rest } = listeners ?? {};
@@ -324,7 +335,8 @@ function TaskCardView({
       data-task-id={task.id}
       data-overdue={overdue ? "true" : "false"}
       className={cn(
-        "cursor-grab rounded-lg border border-white/8 bg-[#14161c] px-2.5 py-2 text-left shadow-xs active:cursor-grabbing",
+        "rounded-lg border border-white/8 bg-[#14161c] px-2.5 py-2 text-left shadow-xs",
+        desk.canWrite ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
         overlay && "shadow-lg",
       )}
       {...props}

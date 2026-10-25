@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { toast } from "sonner";
 import { canPersist, isDepartment, parseDesk, parseDeskJson, type LoadStatus } from "@/lib/desk-parse";
 import { wouldCreateCycle } from "@/lib/links";
@@ -20,12 +21,15 @@ const SKIP_IMPORT_KEY = "keel.skipLocalImport";
 
 export type MutationResult = { ok: true } | { ok: false; reason: string };
 
+const READ_ONLY_REASON = "Viewers can look at the desk but cannot change it.";
+
 type DeskContextValue = DeskState & {
   ready: boolean;
   loadStatus: LoadStatus;
   loadError: string | null;
   saveError: string | null;
   saving: boolean;
+  canWrite: boolean;
   pendingLocalImport: DeskState | null;
   developerById: Map<string, Developer>;
   projectById: Map<string, Project>;
@@ -152,6 +156,16 @@ let snapshot: Snapshot = {
 
 let saveSeq = 0;
 let loadStarted = false;
+let writesAllowed = true;
+
+export function setDeskWritesAllowed(allowed: boolean) {
+  writesAllowed = allowed;
+}
+
+function denyWrites(): MutationResult | null {
+  if (writesAllowed) return null;
+  return fail(READ_ONLY_REASON);
+}
 
 function notify() {
   for (const listener of listeners) listener();
@@ -173,8 +187,14 @@ async function persist(state: DeskState) {
       body: JSON.stringify(state),
     });
     if (seq !== saveSeq) return;
-    if (res.status === 401 || res.status === 403) {
+    if (res.status === 401) {
       setSnapshot({ saving: false, needsLogin: true });
+      return;
+    }
+    if (res.status === 403) {
+      const body = (await res.json().catch(() => null)) as { error?: string } | null;
+      setSnapshot({ saving: false, saveError: body?.error ?? READ_ONLY_REASON });
+      toast.error(body?.error ?? READ_ONLY_REASON);
       return;
     }
     if (!res.ok) {
@@ -284,6 +304,8 @@ function commit(next: DeskState) {
 }
 
 function createProject(input: Omit<Project, "id">): MutationResult & { id?: string } {
+  const blocked = denyWrites();
+  if (blocked) return blocked;
   const state = ensureState();
   const developerIds = new Set(state.developers.map((person) => person.id));
   const projectIds = new Set(state.projects.map((project) => project.id));
@@ -320,6 +342,8 @@ function createProject(input: Omit<Project, "id">): MutationResult & { id?: stri
 }
 
 function updateProject(id: string, patch: Partial<Omit<Project, "id">>): MutationResult {
+  const blocked = denyWrites();
+  if (blocked) return blocked;
   const state = ensureState();
   const developerIds = new Set(state.developers.map((person) => person.id));
   const projectIds = new Set(state.projects.map((project) => project.id));
@@ -355,6 +379,7 @@ function updateProject(id: string, patch: Partial<Omit<Project, "id">>): Mutatio
 }
 
 function deleteProject(id: string) {
+  if (denyWrites()) return;
   const state = ensureState();
   commit({
     ...state,
@@ -372,6 +397,8 @@ function deleteProject(id: string) {
 }
 
 function createTask(input: Omit<Task, "id">): MutationResult & { id?: string } {
+  const blocked = denyWrites();
+  if (blocked) return blocked;
   const state = ensureState();
   const developerIds = new Set(state.developers.map((person) => person.id));
   const projectIds = new Set(state.projects.map((project) => project.id));
@@ -411,6 +438,8 @@ function createTask(input: Omit<Task, "id">): MutationResult & { id?: string } {
 }
 
 function updateTask(id: string, patch: Partial<Omit<Task, "id">>): MutationResult {
+  const blocked = denyWrites();
+  if (blocked) return blocked;
   const state = ensureState();
   const developerIds = new Set(state.developers.map((person) => person.id));
   const projectIds = new Set(state.projects.map((project) => project.id));
@@ -462,6 +491,7 @@ function updateTask(id: string, patch: Partial<Omit<Task, "id">>): MutationResul
 }
 
 function deleteTask(id: string) {
+  if (denyWrites()) return;
   const state = ensureState();
   const current = state.tasks.find((item) => item.id === id);
   const updatedAt = editedAt();
@@ -476,6 +506,8 @@ function deleteTask(id: string) {
 }
 
 function addComment(input: { taskId: string; body: string; authorId: string }): MutationResult & { id?: string } {
+  const blocked = denyWrites();
+  if (blocked) return blocked;
   const state = ensureState();
   const body = input.body.trim();
   if (!body) return fail("Write a comment first.");
@@ -503,6 +535,7 @@ function addComment(input: { taskId: string; body: string; authorId: string }): 
 }
 
 function deleteComment(id: string) {
+  if (denyWrites()) return;
   const state = ensureState();
   const current = state.comments.find((comment) => comment.id === id);
   const task = current ? state.tasks.find((item) => item.id === current.taskId) : undefined;
@@ -518,6 +551,8 @@ function deleteComment(id: string) {
 }
 
 function createDeveloper(input: DeveloperInput): MutationResult & { id?: string } {
+  const blocked = denyWrites();
+  if (blocked) return blocked;
   const state = ensureState();
   const id = crypto.randomUUID();
   const parsed = developerFromInput(input, id);
@@ -527,6 +562,8 @@ function createDeveloper(input: DeveloperInput): MutationResult & { id?: string 
 }
 
 function updateDeveloper(id: string, patch: DeveloperInput): MutationResult {
+  const blocked = denyWrites();
+  if (blocked) return blocked;
   const state = ensureState();
   if (!state.developers.some((person) => person.id === id)) return fail("That person is no longer on the roster.");
   const parsed = developerFromInput(patch, id);
@@ -539,6 +576,8 @@ function updateDeveloper(id: string, patch: DeveloperInput): MutationResult {
 }
 
 function deleteDeveloper(id: string): MutationResult {
+  const blocked = denyWrites();
+  if (blocked) return blocked;
   const state = ensureState();
   if (!state.developers.some((person) => person.id === id)) return fail("That person is no longer on the roster.");
   if (state.developers.length === 1) return fail("Keep at least one person on the roster.");
@@ -553,6 +592,8 @@ function deleteDeveloper(id: string): MutationResult {
 }
 
 function importLocalDesk(): MutationResult {
+  const blocked = denyWrites();
+  if (blocked) return blocked;
   const local = snapshot.pendingLocalImport;
   if (!local) return fail("There is no local desk to import.");
   const parsed = parseDesk(local);
@@ -582,6 +623,8 @@ function exportJson(): string {
 }
 
 function importJson(raw: string): MutationResult {
+  const blocked = denyWrites();
+  if (blocked) return blocked;
   const parsed = parseDeskJson(raw);
   if (!parsed.ok) return fail(parsed.reason);
   if (!canPersist(snapshot.loadStatus)) {
@@ -601,6 +644,12 @@ function retrySave() {
 export function DeskProvider({ children }: { children: ReactNode }) {
   const current = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
   const router = useRouter();
+  const session = useSession();
+  const canWrite = session.status !== "authenticated" || session.data?.user?.role === "admin";
+
+  useEffect(() => {
+    setDeskWritesAllowed(canWrite);
+  }, [canWrite]);
 
   useEffect(() => {
     if (loadStarted) return;
@@ -623,7 +672,8 @@ export function DeskProvider({ children }: { children: ReactNode }) {
       loadError: current.loadError,
       saveError: current.saveError,
       saving: current.saving,
-      pendingLocalImport: current.pendingLocalImport,
+      canWrite,
+      pendingLocalImport: canWrite ? current.pendingLocalImport : null,
       developerById: new Map(state.developers.map((person) => [person.id, person])),
       projectById: new Map(state.projects.map((project) => [project.id, project])),
       createProject,
@@ -643,7 +693,7 @@ export function DeskProvider({ children }: { children: ReactNode }) {
       importJson,
       retrySave,
     };
-  }, [ready, current]);
+  }, [canWrite, ready, current]);
 
   return <DeskContext.Provider value={value}>{children}</DeskContext.Provider>;
 }

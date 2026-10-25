@@ -2,7 +2,7 @@
 
 Delivery desk for the project manager who runs the IT roster. It covers projects, a kanban, a timeline with dependencies, a task list, and workload for all 20 people.
 
-One person updates everything. Sign-in is Google, limited to an email allowlist. The desk is stored in Cloudflare D1 so it is the same on every device. The app runs on Cloudflare Workers through `@opennextjs/cloudflare`.
+Authorized Google accounts share one delivery desk. Admins can edit everything, including who may sign in. Viewers can look at dashboards, projects, kanban, and the rest, but cannot create, edit, or delete. Sign-in is Google. The desk is stored in Cloudflare D1 so it is the same on every device. The app runs on Cloudflare Workers through `@opennextjs/cloudflare`.
 
 ## Run locally
 
@@ -59,7 +59,7 @@ None of these are committed. Local `next dev` reads `.env.local`. Production rea
 | `AUTH_SECRET` | Yes | Auth.js cookie encryption secret. At least 32 random characters. `openssl rand -base64 32` |
 | `AUTH_GOOGLE_ID` | Yes | Google OAuth 2.0 Web client ID. |
 | `AUTH_GOOGLE_SECRET` | Yes | Google OAuth 2.0 Web client secret. |
-| `ALLOWED_EMAILS` | No | Comma-separated Google emails that may read or write. Default: `salle.kma@gmail.com`. |
+| `ALLOWED_EMAILS` | No | Comma-separated bootstrap **admin** emails. They can always sign in, stay admins, and cannot be removed or demoted in User Management. Default: `salle.kma@gmail.com`. Additional users live in D1 (`keel_users`). |
 | `AUTH_URL` | No | Canonical site URL if the host cannot be inferred. Set this to the workers.dev (or custom) URL after the first deploy. |
 | `AUTH_TRUST_HOST` | No | Set to `true` so Auth.js trusts `X-Forwarded-Host`. `wrangler.jsonc` already sets this for the Worker. |
 | `CLOUDFLARE_API_TOKEN` | For deploy | API token with Workers Scripts, D1, and Account read. Used by Wrangler; do not put it in the Worker. |
@@ -97,7 +97,16 @@ CI=1 npm run d1:migrate
 
 `d1:ensure` runs `wrangler d1 create keel` only if that database does not already exist, then patches `database_id` in `wrangler.jsonc`. `d1:migrate` applies `migrations/*.sql` to the remote `keel` database. `CI=1` skips the Wrangler confirmation prompt.
 
-The first migration creates `keel_desk` (`id`, `data` JSON text, `updated_at`).
+Migrations:
+
+- `migrations/0001_create_keel_desk.sql` — `keel_desk` (`id`, `data` JSON text, `updated_at`). One row, `id = default`, is the shared workspace every authorized user reads and writes.
+- `migrations/0002_create_keel_users.sql` — `keel_users` (`email`, `role` `admin`|`viewer`, timestamps). Apply this on the remote database before (or right after) deploying User Management:
+
+```bash
+CI=1 npm run d1:migrate
+```
+
+No new environment variables. `ALLOWED_EMAILS` is still the bootstrap admin list.
 
 Local D1 (for `next dev` / `npm run preview`):
 
@@ -137,7 +146,7 @@ That runs `opennextjs-cloudflare build` (which calls `next build --webpack`) and
 ### 5. Google OAuth client
 
 1. Open [Google Cloud Console](https://console.cloud.google.com/apis/credentials) → the project that should own Keel sign-in (or create one).
-2. **APIs & Services** → **OAuth consent screen**. User type can be External. App name `Keel`. Add the allowlisted emails as test users while the consent screen is in Testing.
+2. **APIs & Services** → **OAuth consent screen**. User type can be External. App name `Keel`. Add authorized emails as test users while the consent screen is in Testing.
 3. **Credentials** → **Create credentials** → **OAuth client ID** → application type **Web application**.
 4. Authorized JavaScript origins:
    - `https://keel.<your-workers-subdomain>.workers.dev`
@@ -155,7 +164,15 @@ If you instead publish through Cloudflare Pages, the host is `https://<project>.
 ### 6. What the APIs do
 
 - `GET /api/auth/*` and `POST /api/auth/*` — Auth.js (Google sign-in, session, sign-out).
-- `GET /api/desk` — load the desk. **401** with no session. **403** if the signed-in email is not allowlisted.
-- `PUT /api/desk` — save the desk after every edit. Same 401/403 rules.
+- `GET /api/desk` — load the shared desk. **401** with no session. **403** if the signed-in email is not a bootstrap admin and not in `keel_users`.
+- `PUT /api/desk` — save the desk after every edit. Same 401 rules. **403** for viewers and unauthorized emails.
+- `GET /api/users` — list authorized users (admins only).
+- `POST /api/users` — add a Google email with role `admin` or `viewer` (admins only).
+- `PATCH /api/users/[email]` — change a role (admins only). Bootstrap emails and the last admin cannot be demoted.
+- `DELETE /api/users/[email]` — remove a user (admins only). Bootstrap emails and the last admin cannot be removed.
+
+The sidebar **Users** item is shown only to admins. Viewers share the same D1 desk (`keel_desk` id `default`); they are not given a private copy.
+
+The session JWT includes `user.role` (`admin` | `viewer`) so the UI can hide edit controls. Writes are still rejected on the server.
 
 Pages other than `/login` redirect to Google sign-in when there is no session. Data APIs never redirect; they return 401 so a missing cookie cannot be mistaken for an empty desk.

@@ -4,6 +4,7 @@ interface CloudflareEnv {
       bind(...values: unknown[]): {
         first<T extends Record<string, unknown>>(): Promise<T | null>;
         run(): Promise<unknown>;
+        all<T extends Record<string, unknown>>(): Promise<{ results: T[] }>;
       };
     };
   };

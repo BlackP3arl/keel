@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { allowedEmails, DEFAULT_ALLOWED_EMAIL, isAllowlisted } from "@/lib/allowlist";
+import { allowedEmails, DEFAULT_ALLOWED_EMAIL, isAllowlisted, isBootstrapAdmin } from "@/lib/allowlist";
 
 describe("allowlist", () => {
   afterEach(() => {
@@ -9,7 +9,7 @@ describe("allowlist", () => {
   it("seeds salle.kma@gmail.com when ALLOWED_EMAILS is unset", () => {
     expect(allowedEmails(undefined)).toEqual([DEFAULT_ALLOWED_EMAIL]);
     expect(isAllowlisted("salle.kma@gmail.com", undefined)).toBe(true);
-    expect(isAllowlisted("SALLE.KMA@GMAIL.COM", undefined)).toBe(true);
+    expect(isBootstrapAdmin("SALLE.KMA@GMAIL.COM", undefined)).toBe(true);
   });
 
   it("reads a comma-separated override", () => {

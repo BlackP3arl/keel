@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 
 function errorCopy(code: string | null): string | null {
   if (!code) return null;
-  if (code === "AccessDenied") return "That Google account is not on the allowlist.";
+  if (code === "AccessDenied") return "That Google account is not authorized to use Keel.";
   if (code === "Configuration") return "Sign-in is not configured. Check AUTH_SECRET and Google OAuth env vars.";
   return "Sign-in did not finish. Try again.";
 }
@@ -20,7 +20,7 @@ export function LoginForm() {
       <div className="w-full max-w-sm rounded-xl border bg-card p-6">
         <p className="font-heading text-2xl tracking-tight">Keel</p>
         <p className="mt-1 text-sm text-muted-foreground">
-          Delivery desk. Sign in with a Google account on the allowlist.
+          Delivery desk. Sign in with an authorized Google account.
         </p>
         {message ? (
           <p role="alert" className="mt-4 text-sm text-destructive" data-testid="login-error">

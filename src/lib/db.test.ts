@@ -25,6 +25,9 @@ function memoryD1(): D1Like & { store: Map<string, string> } {
               store.set(id, data);
               return { success: true };
             },
+            async all<T extends Record<string, unknown>>() {
+              return { results: [] as T[] };
+            },
           };
         },
       };

@@ -2,10 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { seedData } from "@/lib/seed";
 import type { DeskState, Project } from "@/lib/types";
 
-const { authMock, getStoredDeskMock, saveStoredDeskMock } = vi.hoisted(() => ({
+const { authMock, getStoredDeskMock, saveStoredDeskMock, findStoredRoleMock } = vi.hoisted(() => ({
   authMock: vi.fn(),
   getStoredDeskMock: vi.fn(),
   saveStoredDeskMock: vi.fn(),
+  findStoredRoleMock: vi.fn(),
 }));
 
 vi.mock("@/auth", () => ({
@@ -15,6 +16,10 @@ vi.mock("@/auth", () => ({
 vi.mock("@/lib/db", () => ({
   getStoredDesk: () => getStoredDeskMock(),
   saveStoredDesk: (desk: DeskState) => saveStoredDeskMock(desk),
+}));
+
+vi.mock("@/lib/users", () => ({
+  findStoredRole: (...args: unknown[]) => findStoredRoleMock(...args),
 }));
 
 import { getDesk, putDesk } from "@/lib/desk-api";
@@ -39,6 +44,8 @@ describe("desk APIs", () => {
     authMock.mockReset();
     getStoredDeskMock.mockReset();
     saveStoredDeskMock.mockReset();
+    findStoredRoleMock.mockReset();
+    findStoredRoleMock.mockResolvedValue(null);
     delete process.env.ALLOWED_EMAILS;
   });
 
@@ -98,5 +105,40 @@ describe("desk APIs", () => {
     expect(body.empty).toBe(false);
     expect(body.desk.projects).toEqual(desk.projects);
     expect(body.desk.projects[0]?.name).toBe("Server desk");
+  });
+
+  it("lets a D1 viewer read the desk but not save it", async () => {
+    authMock.mockResolvedValue({ user: { email: "viewer@example.com" } });
+    findStoredRoleMock.mockResolvedValue("viewer");
+    getStoredDeskMock.mockResolvedValue(sampleDesk());
+
+    const get = await getDesk();
+    expect(get.status).toBe(200);
+
+    const put = await putDesk(
+      new Request("http://keel.test/api/desk", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(sampleDesk()),
+      }),
+    );
+    expect(put.status).toBe(403);
+    expect(saveStoredDeskMock).not.toHaveBeenCalled();
+  });
+
+  it("lets a D1 admin save the desk", async () => {
+    authMock.mockResolvedValue({ user: { email: "lead@example.com" } });
+    findStoredRoleMock.mockResolvedValue("admin");
+    getStoredDeskMock.mockResolvedValue(null);
+
+    const put = await putDesk(
+      new Request("http://keel.test/api/desk", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(sampleDesk()),
+      }),
+    );
+    expect(put.status).toBe(200);
+    expect(saveStoredDeskMock).toHaveBeenCalled();
   });
 });

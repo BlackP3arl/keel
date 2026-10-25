@@ -60,10 +60,12 @@ export function TeamView() {
         title="Team"
         lede="The IT roster. Add someone and they can own a project or take a task. Removing a person clears those assignments."
         action={
-          <Button onClick={() => setCreating(true)} data-testid="new-person">
-            <Plus />
-            Add person
-          </Button>
+          desk.canWrite ? (
+            <Button onClick={() => setCreating(true)} data-testid="new-person">
+              <Plus />
+              Add person
+            </Button>
+          ) : undefined
         }
       />
       {desk.developers.length === 0 ? (
@@ -71,10 +73,12 @@ export function TeamView() {
           title="No one on the roster"
           body="Add the first person so projects and tasks have someone to assign."
           action={
-            <Button onClick={() => setCreating(true)}>
-              <Plus />
-              Add person
-            </Button>
+            desk.canWrite ? (
+              <Button onClick={() => setCreating(true)}>
+                <Plus />
+                Add person
+              </Button>
+            ) : undefined
           }
         />
       ) : (
@@ -94,8 +98,10 @@ export function TeamView() {
                   key={person.id}
                   data-testid="team-row"
                   data-developer-id={person.id}
-                  className="cursor-pointer"
-                  onClick={() => setEditing(person)}
+                  className={desk.canWrite ? "cursor-pointer" : undefined}
+                  onClick={() => {
+                    if (desk.canWrite) setEditing(person);
+                  }}
                 >
                   <TableCell className="font-medium">{person.name}</TableCell>
                   <TableCell>{person.role || "—"}</TableCell>

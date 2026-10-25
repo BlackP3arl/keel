@@ -60,10 +60,12 @@ export function ProjectsView() {
         title="Projects"
         lede="Every project on the desk. Filter by status, sort a column, and open a row to edit it."
         action={
-          <Button onClick={() => setCreating(true)} data-testid="new-project">
-            <Plus />
-            New project
-          </Button>
+          desk.canWrite ? (
+            <Button onClick={() => setCreating(true)} data-testid="new-project">
+              <Plus />
+              New project
+            </Button>
+          ) : undefined
         }
       />
 
@@ -103,10 +105,12 @@ export function ProjectsView() {
           title="No projects yet"
           body="Create a project to put work on the desk."
           action={
-            <Button onClick={() => setCreating(true)}>
-              <Plus />
-              New project
-            </Button>
+            desk.canWrite ? (
+              <Button onClick={() => setCreating(true)}>
+                <Plus />
+                New project
+              </Button>
+            ) : undefined
           }
         />
       ) : rows.length === 0 ? (

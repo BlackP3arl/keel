@@ -102,32 +102,34 @@ export function ProjectDetail() {
           <p className="mt-2 text-sm text-muted-foreground">{project.summary}</p>
           <p className="mt-2 text-sm">{healthReason(project, tasks, today, health)}</p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={() => setEditing(true)}>
-            Edit details
-          </Button>
-          {project.status !== "on_hold" ? (
-            <Button variant="outline" data-testid="hold-project" onClick={() => setStatus("on_hold")}>
-              Put on hold
+        {desk.canWrite ? (
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={() => setEditing(true)}>
+              Edit details
             </Button>
-          ) : (
-            <Button variant="outline" data-testid="resume-project" onClick={() => setStatus("active")}>
-              Resume
+            {project.status !== "on_hold" ? (
+              <Button variant="outline" data-testid="hold-project" onClick={() => setStatus("on_hold")}>
+                Put on hold
+              </Button>
+            ) : (
+              <Button variant="outline" data-testid="resume-project" onClick={() => setStatus("active")}>
+                Resume
+              </Button>
+            )}
+            {project.status !== "done" ? (
+              <Button data-testid="complete-project" onClick={() => setStatus("done")}>
+                Mark done
+              </Button>
+            ) : (
+              <Button variant="outline" onClick={() => setStatus("active")}>
+                Reopen
+              </Button>
+            )}
+            <Button variant="destructive" onClick={() => setConfirmDelete(true)}>
+              Delete
             </Button>
-          )}
-          {project.status !== "done" ? (
-            <Button data-testid="complete-project" onClick={() => setStatus("done")}>
-              Mark done
-            </Button>
-          ) : (
-            <Button variant="outline" onClick={() => setStatus("active")}>
-              Reopen
-            </Button>
-          )}
-          <Button variant="destructive" onClick={() => setConfirmDelete(true)}>
-            Delete
-          </Button>
-        </div>
+          </div>
+        ) : null}
       </div>
 
       <div className="mt-4 flex items-center gap-3">
@@ -143,6 +145,7 @@ export function ProjectDetail() {
           developers={desk.developers}
           onValueChange={(ownerId) => apply({ ownerId })}
           testId="detail-owner"
+          disabled={!desk.canWrite}
         />
         <PredecessorSelect
           label="Predecessor project"
@@ -155,12 +158,14 @@ export function ProjectDetail() {
               : "Loops are hidden. Leave this empty if nothing has to finish first."
           }
           testId="detail-predecessor"
+          disabled={!desk.canWrite}
         />
         <div className="grid gap-1.5">
           <span className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Start</span>
           <Input
             type="date"
             value={project.start}
+            disabled={!desk.canWrite}
             onChange={(event) => {
               if (event.target.value) apply({ start: event.target.value });
             }}
@@ -173,6 +178,7 @@ export function ProjectDetail() {
             type="date"
             value={project.due}
             data-testid="detail-due"
+            disabled={!desk.canWrite}
             onChange={(event) => {
               if (event.target.value) apply({ due: event.target.value });
             }}

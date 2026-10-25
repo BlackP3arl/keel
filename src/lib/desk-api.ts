@@ -1,13 +1,13 @@
 import { parseDesk } from "@/lib/desk-parse";
 import { getStoredDesk, saveStoredDesk } from "@/lib/db";
-import { requireAllowlistedSession } from "@/lib/guard";
+import { requireAuthorizedSession, requireWriteSession } from "@/lib/guard";
 
 function jsonError(error: string, status: number) {
   return Response.json({ error }, { status });
 }
 
 export async function getDesk(): Promise<Response> {
-  const session = await requireAllowlistedSession();
+  const session = await requireAuthorizedSession();
   if (!session.ok) return jsonError(session.error, session.status);
 
   try {
@@ -27,7 +27,7 @@ export async function getDesk(): Promise<Response> {
 }
 
 export async function putDesk(request: Request): Promise<Response> {
-  const session = await requireAllowlistedSession();
+  const session = await requireWriteSession();
   if (!session.ok) return jsonError(session.error, session.status);
 
   let body: unknown;

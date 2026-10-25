@@ -122,16 +122,23 @@ export function DeskAccount() {
         {desk.developers.length} people on the IT roster.
         {desk.saving ? " Saving…" : desk.saveError ? " Save failed." : " Saved on the server."}
       </p>
-      {email ? <p className="truncate" title={email}>{email}</p> : null}
+      {email ? (
+        <p className="truncate" title={email}>
+          {email}
+          {session.data?.user?.role === "viewer" ? " · Viewer" : session.data?.user?.role === "admin" ? " · Admin" : ""}
+        </p>
+      ) : null}
       <div className="flex flex-wrap gap-1">
         <Button variant="ghost" size="xs" onClick={onExport} data-testid="export-json">
           <Download />
           Export
         </Button>
-        <Button variant="ghost" size="xs" onClick={() => fileRef.current?.click()} data-testid="import-json">
-          <Upload />
-          Import
-        </Button>
+        {desk.canWrite ? (
+          <Button variant="ghost" size="xs" onClick={() => fileRef.current?.click()} data-testid="import-json">
+            <Upload />
+            Import
+          </Button>
+        ) : null}
         <Button variant="ghost" size="xs" onClick={() => void signOut({ callbackUrl: "/login" })}>
           <LogOut />
           Sign out

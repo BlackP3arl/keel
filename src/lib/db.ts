@@ -4,12 +4,13 @@ import type { DeskState } from "@/lib/types";
 
 const DESK_ID = "default";
 
-/** Minimal D1 surface used by the desk. Tests can pass an in-memory stand-in. */
+/** Minimal D1 surface used by the desk and user table. Tests can pass an in-memory stand-in. */
 export type D1Like = {
   prepare(query: string): {
     bind(...values: unknown[]): {
       first<T extends Record<string, unknown>>(): Promise<T | null>;
       run(): Promise<unknown>;
+      all<T extends Record<string, unknown>>(): Promise<{ results: T[] }>;
     };
   };
 };
@@ -23,7 +24,7 @@ export function decodeStoredData(data: unknown): unknown {
   }
 }
 
-async function getD1(): Promise<D1Like> {
+export async function getD1(): Promise<D1Like> {
   const { env } = await getCloudflareContext({ async: true });
   const db = env.DB;
   if (!db) {
