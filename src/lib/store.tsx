@@ -1,16 +1,36 @@
 "use client";
 
-import { createContext, useContext, useMemo, useSyncExternalStore, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
+import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
+import { toast } from "sonner";
+import { canPersist, isDepartment, parseDesk, parseDeskJson, type LoadStatus } from "@/lib/desk-parse";
 import { wouldCreateCycle } from "@/lib/links";
-import { ensureSeededRoster, seedData } from "@/lib/seed";
-import type { Comment, Department, DeskState, Developer, Project, Task } from "@/lib/types";
+import { seedData } from "@/lib/seed";
+import type { Comment, DeskState, Developer, Project, Task } from "@/lib/types";
 
 export const STORAGE_KEY = "keel.desk.v2";
+const SKIP_IMPORT_KEY = "keel.skipLocalImport";
 
 export type MutationResult = { ok: true } | { ok: false; reason: string };
 
+const READ_ONLY_REASON = "Viewers can look at the desk but cannot change it.";
+
 type DeskContextValue = DeskState & {
   ready: boolean;
+  loadStatus: LoadStatus;
+  loadError: string | null;
+  saveError: string | null;
+  saving: boolean;
+  canWrite: boolean;
+  pendingLocalImport: DeskState | null;
   developerById: Map<string, Developer>;
   projectById: Map<string, Project>;
   createProject: (input: Omit<Project, "id">) => MutationResult & { id?: string };
@@ -24,6 +44,11 @@ type DeskContextValue = DeskState & {
   createDeveloper: (input: DeveloperInput) => MutationResult & { id?: string };
   updateDeveloper: (id: string, patch: DeveloperInput) => MutationResult;
   deleteDeveloper: (id: string) => MutationResult;
+  importLocalDesk: () => MutationResult;
+  dismissLocalImport: () => void;
+  exportJson: () => string;
+  importJson: (raw: string) => MutationResult;
+  retrySave: () => void;
 };
 
 type DeveloperInput = {
@@ -33,35 +58,17 @@ type DeveloperInput = {
   email: string;
 };
 
+type Snapshot = {
+  state: DeskState | null;
+  loadStatus: LoadStatus;
+  loadError: string | null;
+  saveError: string | null;
+  saving: boolean;
+  pendingLocalImport: DeskState | null;
+  needsLogin: boolean;
+};
+
 const DeskContext = createContext<DeskContextValue | null>(null);
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function isDeveloper(value: unknown): value is Developer {
-  if (!isRecord(value)) return false;
-  return (
-    typeof value.id === "string" &&
-    typeof value.name === "string" &&
-    typeof value.role === "string" &&
-    (value.department === "Software Engineering" ||
-      value.department === "Data Services" ||
-      value.department === "Cloud & Security" ||
-      value.department === "IT") &&
-    typeof value.email === "string" &&
-    (value.email.length === 0 || value.email.includes("@"))
-  );
-}
-
-function isDepartment(value: string): value is Department {
-  return (
-    value === "Software Engineering" ||
-    value === "Data Services" ||
-    value === "Cloud & Security" ||
-    value === "IT"
-  );
-}
 
 function developerFromInput(input: DeveloperInput, id: string): { person: Developer } | { error: string } {
   const name = input.name.trim();
@@ -80,79 +87,30 @@ function developerFromInput(input: DeveloperInput, id: string): { person: Develo
   };
 }
 
-function isProject(value: unknown): value is Project {
-  if (!isRecord(value)) return false;
-  return (
-    typeof value.id === "string" &&
-    typeof value.name === "string" &&
-    typeof value.summary === "string" &&
-    (value.status === "active" || value.status === "on_hold" || value.status === "done") &&
-    typeof value.start === "string" &&
-    typeof value.due === "string" &&
-    typeof value.ownerId === "string" &&
-    (value.predecessorProjectId === null || typeof value.predecessorProjectId === "string")
-  );
-}
-
-function isComment(value: unknown): value is Comment {
-  if (!isRecord(value)) return false;
-  return (
-    typeof value.id === "string" &&
-    value.id.length > 0 &&
-    typeof value.taskId === "string" &&
-    value.taskId.length > 0 &&
-    typeof value.body === "string" &&
-    value.body.trim().length > 0 &&
-    typeof value.createdAt === "string" &&
-    value.createdAt.length > 0 &&
-    typeof value.authorId === "string"
-  );
-}
-
-/** Older desks saved before comments existed still load. Bad comment rows are dropped. */
-function readComments(value: unknown): Comment[] {
-  if (!Array.isArray(value)) return [];
-  return value.filter(isComment);
-}
-
-function isTask(value: unknown): value is Task {
-  if (!isRecord(value)) return false;
-  const statuses = ["backlog", "todo", "in_progress", "in_review", "done"];
-  const priorities = ["low", "medium", "high"];
-  return (
-    typeof value.id === "string" &&
-    typeof value.projectId === "string" &&
-    typeof value.title === "string" &&
-    typeof value.assigneeId === "string" &&
-    statuses.includes(String(value.status)) &&
-    priorities.includes(String(value.priority)) &&
-    typeof value.start === "string" &&
-    typeof value.due === "string" &&
-    (value.predecessorTaskId === null || typeof value.predecessorTaskId === "string")
-  );
-}
-
-function readStored(): DeskState | null {
+export function readLocalDesk(): DeskState | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
-    const parsed: unknown = JSON.parse(raw);
-    if (!isRecord(parsed)) return null;
-    if (!Array.isArray(parsed.developers) || !Array.isArray(parsed.projects) || !Array.isArray(parsed.tasks)) {
-      return null;
-    }
-    if (!parsed.developers.every(isDeveloper)) return null;
-    if (!parsed.projects.every(isProject)) return null;
-    if (!parsed.tasks.every(isTask)) return null;
-    if (parsed.developers.length === 0) return null;
-    return {
-      developers: ensureSeededRoster(parsed.developers),
-      projects: parsed.projects,
-      tasks: parsed.tasks,
-      comments: readComments(parsed.comments),
-    };
+    const parsed = parseDeskJson(raw);
+    return parsed.ok ? parsed.desk : null;
   } catch {
     return null;
+  }
+}
+
+function skippedImportThisSession(): boolean {
+  try {
+    return sessionStorage.getItem(SKIP_IMPORT_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function markImportSkipped() {
+  try {
+    sessionStorage.setItem(SKIP_IMPORT_KEY, "1");
+  } catch {
+    // sessionStorage can be blocked; the prompt may reappear on reload.
   }
 }
 
@@ -185,28 +143,130 @@ function taskDatesOk(start: string, due: string): MutationResult | null {
 }
 
 const listeners = new Set<() => void>();
-let clientState: DeskState | null = null;
 
-function persist(state: DeskState) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  } catch {
-    // The desk still works for this session if the browser refuses storage.
-  }
+let snapshot: Snapshot = {
+  state: null,
+  loadStatus: "pending",
+  loadError: null,
+  saveError: null,
+  saving: false,
+  pendingLocalImport: null,
+  needsLogin: false,
+};
+
+let saveSeq = 0;
+let loadStarted = false;
+let writesAllowed = true;
+
+export function setDeskWritesAllowed(allowed: boolean) {
+  writesAllowed = allowed;
 }
 
-function ensureClient(): DeskState {
-  if (!clientState) {
-    // A saved desk is kept as-is, aside from adding Ahmed Salam if he is missing.
-    clientState = readStored() ?? seedData();
-  }
-  return clientState;
+function denyWrites(): MutationResult | null {
+  if (writesAllowed) return null;
+  return fail(READ_ONLY_REASON);
 }
 
-function commit(next: DeskState) {
-  clientState = next;
-  persist(next);
+function notify() {
   for (const listener of listeners) listener();
+}
+
+function setSnapshot(patch: Partial<Snapshot>) {
+  snapshot = { ...snapshot, ...patch };
+  notify();
+}
+
+async function persist(state: DeskState) {
+  if (!canPersist(snapshot.loadStatus)) return;
+  const seq = ++saveSeq;
+  setSnapshot({ saving: true });
+  try {
+    const res = await fetch("/api/desk", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(state),
+    });
+    if (seq !== saveSeq) return;
+    if (res.status === 401) {
+      setSnapshot({ saving: false, needsLogin: true });
+      return;
+    }
+    if (res.status === 403) {
+      const body = (await res.json().catch(() => null)) as { error?: string } | null;
+      setSnapshot({ saving: false, saveError: body?.error ?? READ_ONLY_REASON });
+      toast.error(body?.error ?? READ_ONLY_REASON);
+      return;
+    }
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as { error?: string } | null;
+      const reason = body?.error ?? `Save failed (${res.status}).`;
+      setSnapshot({ saving: false, saveError: reason, loadStatus: snapshot.loadStatus === "empty" ? "empty" : "ok" });
+      toast.error(reason);
+      return;
+    }
+    setSnapshot({ saving: false, saveError: null, loadStatus: "ok" });
+  } catch (error) {
+    if (seq !== saveSeq) return;
+    const reason = error instanceof Error ? error.message : "Save failed.";
+    setSnapshot({ saving: false, saveError: reason });
+    toast.error(reason);
+  }
+}
+
+async function loadFromServer() {
+  try {
+    const res = await fetch("/api/desk");
+    if (res.status === 401 || res.status === 403) {
+      setSnapshot({ needsLogin: true });
+      return;
+    }
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as { error?: string } | null;
+      setSnapshot({
+        state: seedData(),
+        loadStatus: "failed",
+        loadError: body?.error ?? `The desk could not be loaded (${res.status}).`,
+        pendingLocalImport: null,
+      });
+      return;
+    }
+    const payload = (await res.json()) as { empty?: boolean; desk?: unknown };
+    if (payload.empty || payload.desk == null) {
+      const local = readLocalDesk();
+      const offerImport = local !== null && !skippedImportThisSession();
+      setSnapshot({
+        state: seedData(),
+        loadStatus: "empty",
+        loadError: null,
+        pendingLocalImport: offerImport ? local : null,
+      });
+      return;
+    }
+    const parsed = parseDesk(payload.desk);
+    if (!parsed.ok) {
+      setSnapshot({
+        state: seedData(),
+        loadStatus: "failed",
+        loadError: parsed.reason,
+        pendingLocalImport: null,
+      });
+      return;
+    }
+    setSnapshot({
+      state: parsed.desk,
+      loadStatus: "ok",
+      loadError: null,
+      pendingLocalImport: null,
+    });
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : "The desk could not be loaded.";
+    setSnapshot({
+      state: seedData(),
+      loadStatus: "failed",
+      loadError: reason,
+      pendingLocalImport: null,
+    });
+  }
 }
 
 function subscribe(listener: () => void) {
@@ -214,16 +274,39 @@ function subscribe(listener: () => void) {
   return () => listeners.delete(listener);
 }
 
-function getSnapshot(): DeskState | null {
-  return ensureClient();
+function getSnapshot(): Snapshot {
+  return snapshot;
 }
 
-function getServerSnapshot(): DeskState | null {
-  return null;
+function getServerSnapshot(): Snapshot {
+  return {
+    state: null,
+    loadStatus: "pending",
+    loadError: null,
+    saveError: null,
+    saving: false,
+    pendingLocalImport: null,
+    needsLogin: false,
+  };
+}
+
+function ensureState(): DeskState {
+  if (snapshot.state) return snapshot.state;
+  const seeded = seedData();
+  snapshot = { ...snapshot, state: seeded };
+  return seeded;
+}
+
+function commit(next: DeskState) {
+  snapshot = { ...snapshot, state: next };
+  notify();
+  void persist(next);
 }
 
 function createProject(input: Omit<Project, "id">): MutationResult & { id?: string } {
-  const state = ensureClient();
+  const blocked = denyWrites();
+  if (blocked) return blocked;
+  const state = ensureState();
   const developerIds = new Set(state.developers.map((person) => person.id));
   const projectIds = new Set(state.projects.map((project) => project.id));
   const name = input.name.trim();
@@ -259,7 +342,9 @@ function createProject(input: Omit<Project, "id">): MutationResult & { id?: stri
 }
 
 function updateProject(id: string, patch: Partial<Omit<Project, "id">>): MutationResult {
-  const state = ensureClient();
+  const blocked = denyWrites();
+  if (blocked) return blocked;
+  const state = ensureState();
   const developerIds = new Set(state.developers.map((person) => person.id));
   const projectIds = new Set(state.projects.map((project) => project.id));
   const current = state.projects.find((project) => project.id === id);
@@ -294,7 +379,8 @@ function updateProject(id: string, patch: Partial<Omit<Project, "id">>): Mutatio
 }
 
 function deleteProject(id: string) {
-  const state = ensureClient();
+  if (denyWrites()) return;
+  const state = ensureState();
   commit({
     ...state,
     projects: state.projects
@@ -311,7 +397,9 @@ function deleteProject(id: string) {
 }
 
 function createTask(input: Omit<Task, "id">): MutationResult & { id?: string } {
-  const state = ensureClient();
+  const blocked = denyWrites();
+  if (blocked) return blocked;
+  const state = ensureState();
   const developerIds = new Set(state.developers.map((person) => person.id));
   const projectIds = new Set(state.projects.map((project) => project.id));
   const title = input.title.trim();
@@ -350,7 +438,9 @@ function createTask(input: Omit<Task, "id">): MutationResult & { id?: string } {
 }
 
 function updateTask(id: string, patch: Partial<Omit<Task, "id">>): MutationResult {
-  const state = ensureClient();
+  const blocked = denyWrites();
+  if (blocked) return blocked;
+  const state = ensureState();
   const developerIds = new Set(state.developers.map((person) => person.id));
   const projectIds = new Set(state.projects.map((project) => project.id));
   const current = state.tasks.find((item) => item.id === id);
@@ -401,7 +491,8 @@ function updateTask(id: string, patch: Partial<Omit<Task, "id">>): MutationResul
 }
 
 function deleteTask(id: string) {
-  const state = ensureClient();
+  if (denyWrites()) return;
+  const state = ensureState();
   const current = state.tasks.find((item) => item.id === id);
   const updatedAt = editedAt();
   commit({
@@ -415,7 +506,9 @@ function deleteTask(id: string) {
 }
 
 function addComment(input: { taskId: string; body: string; authorId: string }): MutationResult & { id?: string } {
-  const state = ensureClient();
+  const blocked = denyWrites();
+  if (blocked) return blocked;
+  const state = ensureState();
   const body = input.body.trim();
   if (!body) return fail("Write a comment first.");
   if (!state.tasks.some((item) => item.id === input.taskId)) return fail("That task is no longer on the desk.");
@@ -442,7 +535,8 @@ function addComment(input: { taskId: string; body: string; authorId: string }): 
 }
 
 function deleteComment(id: string) {
-  const state = ensureClient();
+  if (denyWrites()) return;
+  const state = ensureState();
   const current = state.comments.find((comment) => comment.id === id);
   const task = current ? state.tasks.find((item) => item.id === current.taskId) : undefined;
   const updatedAt = editedAt();
@@ -457,7 +551,9 @@ function deleteComment(id: string) {
 }
 
 function createDeveloper(input: DeveloperInput): MutationResult & { id?: string } {
-  const state = ensureClient();
+  const blocked = denyWrites();
+  if (blocked) return blocked;
+  const state = ensureState();
   const id = crypto.randomUUID();
   const parsed = developerFromInput(input, id);
   if ("error" in parsed) return fail(parsed.error);
@@ -466,7 +562,9 @@ function createDeveloper(input: DeveloperInput): MutationResult & { id?: string 
 }
 
 function updateDeveloper(id: string, patch: DeveloperInput): MutationResult {
-  const state = ensureClient();
+  const blocked = denyWrites();
+  if (blocked) return blocked;
+  const state = ensureState();
   if (!state.developers.some((person) => person.id === id)) return fail("That person is no longer on the roster.");
   const parsed = developerFromInput(patch, id);
   if ("error" in parsed) return fail(parsed.error);
@@ -478,7 +576,9 @@ function updateDeveloper(id: string, patch: DeveloperInput): MutationResult {
 }
 
 function deleteDeveloper(id: string): MutationResult {
-  const state = ensureClient();
+  const blocked = denyWrites();
+  if (blocked) return blocked;
+  const state = ensureState();
   if (!state.developers.some((person) => person.id === id)) return fail("That person is no longer on the roster.");
   if (state.developers.length === 1) return fail("Keep at least one person on the roster.");
   commit({
@@ -491,15 +591,89 @@ function deleteDeveloper(id: string): MutationResult {
   return { ok: true };
 }
 
+function importLocalDesk(): MutationResult {
+  const blocked = denyWrites();
+  if (blocked) return blocked;
+  const local = snapshot.pendingLocalImport;
+  if (!local) return fail("There is no local desk to import.");
+  const parsed = parseDesk(local);
+  if (!parsed.ok) return fail(parsed.reason);
+  setSnapshot({ pendingLocalImport: null, loadStatus: "empty" });
+  commit(parsed.desk);
+  return { ok: true };
+}
+
+function dismissLocalImport() {
+  markImportSkipped();
+  setSnapshot({ pendingLocalImport: null });
+}
+
+function exportJson(): string {
+  const state = ensureState();
+  return `${JSON.stringify(
+    {
+      developers: state.developers,
+      projects: state.projects,
+      tasks: state.tasks,
+      comments: state.comments,
+    },
+    null,
+    2,
+  )}\n`;
+}
+
+function importJson(raw: string): MutationResult {
+  const blocked = denyWrites();
+  if (blocked) return blocked;
+  const parsed = parseDeskJson(raw);
+  if (!parsed.ok) return fail(parsed.reason);
+  if (!canPersist(snapshot.loadStatus)) {
+    return fail("The desk did not load, so it will not be overwritten.");
+  }
+  setSnapshot({ pendingLocalImport: null, loadStatus: snapshot.loadStatus === "failed" ? "failed" : "ok" });
+  commit(parsed.desk);
+  return { ok: true };
+}
+
+function retrySave() {
+  const state = snapshot.state;
+  if (!state) return;
+  void persist(state);
+}
+
 export function DeskProvider({ children }: { children: ReactNode }) {
-  const snapshot = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
-  const ready = snapshot !== null;
+  const current = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  const router = useRouter();
+  const session = useSession();
+  const canWrite = session.status !== "authenticated" || session.data?.user?.role === "admin";
+
+  useEffect(() => {
+    setDeskWritesAllowed(canWrite);
+  }, [canWrite]);
+
+  useEffect(() => {
+    if (loadStarted) return;
+    loadStarted = true;
+    void loadFromServer();
+  }, []);
+
+  useEffect(() => {
+    if (current.needsLogin) router.replace("/login");
+  }, [current.needsLogin, router]);
+
+  const ready = current.loadStatus !== "pending";
 
   const value = useMemo<DeskContextValue>(() => {
-    const state = snapshot ?? seedData();
+    const state = current.state ?? seedData();
     return {
       ...state,
       ready,
+      loadStatus: current.loadStatus,
+      loadError: current.loadError,
+      saveError: current.saveError,
+      saving: current.saving,
+      canWrite,
+      pendingLocalImport: canWrite ? current.pendingLocalImport : null,
       developerById: new Map(state.developers.map((person) => [person.id, person])),
       projectById: new Map(state.projects.map((project) => [project.id, project])),
       createProject,
@@ -513,8 +687,13 @@ export function DeskProvider({ children }: { children: ReactNode }) {
       createDeveloper,
       updateDeveloper,
       deleteDeveloper,
+      importLocalDesk,
+      dismissLocalImport,
+      exportJson,
+      importJson,
+      retrySave,
     };
-  }, [ready, snapshot]);
+  }, [canWrite, ready, current]);
 
   return <DeskContext.Provider value={value}>{children}</DeskContext.Provider>;
 }

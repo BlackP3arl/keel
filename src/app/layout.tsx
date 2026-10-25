@@ -22,7 +22,7 @@ export const metadata: Metadata = {
     template: "%s · Keel",
   },
   description:
-    "Delivery desk for the IT roster. Projects, tasks, and workload, saved in this browser.",
+    "Delivery desk for the IT roster. Projects, tasks, and workload, saved on the server.",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

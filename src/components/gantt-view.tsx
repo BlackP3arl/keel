@@ -242,7 +242,7 @@ export function GanttView() {
           am5gantt.Gantt.new(root, {
             durationUnit: "day",
             excludeWeekends: false,
-            editable: true,
+            editable: desk.canWrite,
             linkNewTasks: false,
             sidebarWidth: 280,
             paddingTop: 4,
@@ -269,7 +269,7 @@ export function GanttView() {
         chart.yAxis.xButton.hide(0);
         chart.yAxis.get("renderer").durationSteppers.template.set("forceHidden", true);
         chart.series.columns.template.setAll({
-          cursorOverStyle: "grab",
+          cursorOverStyle: desk.canWrite ? "grab" : "default",
           cornerRadiusTL: 3,
           cornerRadiusTR: 3,
           cornerRadiusBL: 3,
@@ -316,9 +316,9 @@ export function GanttView() {
       appliedKey.current = "";
       setChartReady(false);
     };
-    // Recreate only when the host mounts. Data updates go through the apply effect.
+    // Recreate when the host mounts or write access changes. Data updates go through the apply effect.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [model.categories.length === 0]);
+  }, [desk.canWrite, model.categories.length === 0]);
 
   useEffect(() => {
     const chart = chartRef.current?.chart;
@@ -352,7 +352,11 @@ export function GanttView() {
     >
       <PageHeader
         title="Timeline"
-        lede="Projects sit above their tasks. Lines run from a predecessor to the work that follows it. Drag a bar to move its dates. Rust bars are late."
+        lede={
+          desk.canWrite
+            ? "Projects sit above their tasks. Lines run from a predecessor to the work that follows it. Drag a bar to move its dates. Rust bars are late."
+            : "Projects sit above their tasks. Lines run from a predecessor to the work that follows it. Rust bars are late. Viewers cannot move dates."
+        }
         action={
           <ProjectFilter
             projects={projectOptions}

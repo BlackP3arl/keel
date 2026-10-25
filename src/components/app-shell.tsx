@@ -7,12 +7,16 @@ import {
   ChartGantt,
   Columns3,
   Contact,
+  FolderKanban,
   LayoutDashboard,
   ListChecks,
   Menu,
+  UserCog,
   Users,
   type LucideIcon,
 } from "lucide-react";
+import { useSession } from "next-auth/react";
+import { DeskAccount, DeskBanners, LocalImportDialog } from "@/components/desk-status";
 import { ViewErrorBoundary } from "@/components/view-error-boundary";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -27,6 +31,7 @@ import { cn } from "cn";
 
 const NAV: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/projects", label: "Projects", icon: FolderKanban },
   { href: "/kanban", label: "Kanban", icon: Columns3 },
   { href: "/gantt", label: "Timeline", icon: ChartGantt },
   { href: "/tasks", label: "Tasks", icon: ListChecks },
@@ -36,10 +41,13 @@ const NAV: { href: string; label: string; icon: LucideIcon }[] = [
 
 function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
+  const session = useSession();
+  const isAdmin = session.data?.user?.role === "admin";
+  const items = isAdmin ? [...NAV, { href: "/users", label: "Users", icon: UserCog }] : NAV;
 
   return (
     <nav className="grid gap-1" aria-label="Desk">
-      {NAV.map((item) => {
+      {items.map((item) => {
         const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
         const Icon = item.icon;
         return (
@@ -87,9 +95,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
         <div className="mt-auto px-4 py-4">
           <Separator className="mb-3" />
-          <p className="text-xs text-muted-foreground">
-            {desk.developers.length} people on the IT roster. Saved in this browser.
-          </p>
+          <DeskAccount />
         </div>
       </aside>
 
@@ -110,9 +116,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <NavLinks onNavigate={() => setMenuOpen(false)} />
               </div>
               <div className="mt-auto px-4 pb-4">
-                <p className="text-xs text-muted-foreground">
-                  {desk.developers.length} people on the IT roster. Saved in this browser.
-                </p>
+                <DeskAccount />
               </div>
             </SheetContent>
           </Sheet>
@@ -120,7 +124,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </header>
         <main className="min-h-0 flex-1 overflow-y-auto px-4 py-4 md:px-6 md:py-6">
           {desk.ready ? (
-            <ViewErrorBoundary key={pathname}>{children}</ViewErrorBoundary>
+            <>
+              <DeskBanners />
+              <LocalImportDialog />
+              <ViewErrorBoundary key={pathname}>{children}</ViewErrorBoundary>
+            </>
           ) : (
             <p className="text-sm text-muted-foreground">Opening the delivery desk…</p>
           )}

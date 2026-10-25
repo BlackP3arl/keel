@@ -1,18 +1,17 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { AppShell } from "@/components/app-shell";
+import { SessionProvider } from "next-auth/react";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { DeskProvider } from "@/lib/store";
 
 export function Providers({ children }: { children: ReactNode }) {
   return (
-    <TooltipProvider>
-      <DeskProvider>
-        <AppShell>{children}</AppShell>
+    <SessionProvider>
+      <TooltipProvider>
+        {children}
         <Toaster theme="dark" />
-      </DeskProvider>
-    </TooltipProvider>
+      </TooltipProvider>
+    </SessionProvider>
   );
 }

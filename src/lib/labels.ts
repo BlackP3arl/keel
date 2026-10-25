@@ -21,6 +21,8 @@ export const PROJECT_STATUS_LABEL: Record<ProjectStatus, string> = {
   done: "Done",
 };
 
+export const PROJECT_STATUSES: ProjectStatus[] = ["active", "on_hold", "done"];
+
 export const TASK_STATUS_LABEL: Record<TaskStatus, string> = {
   backlog: "Backlog",
   todo: "To do",

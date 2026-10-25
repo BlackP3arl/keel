@@ -1,6 +1,6 @@
 import { Badge } from "@/components/ui/badge";
-import { HEALTH_LABEL, LOAD_LABEL, PRIORITY_LABEL, TASK_STATUS_LABEL } from "@/lib/labels";
-import type { Health, LoadLevel, Priority, TaskStatus } from "@/lib/types";
+import { HEALTH_LABEL, LOAD_LABEL, PRIORITY_LABEL, PROJECT_STATUS_LABEL, TASK_STATUS_LABEL } from "@/lib/labels";
+import type { Health, LoadLevel, Priority, ProjectStatus, TaskStatus } from "@/lib/types";
 import { cn } from "cn";
 
 const healthClass: Record<Health, string> = {
@@ -15,6 +15,25 @@ const loadClass: Record<LoadLevel, string> = {
   busy: "border-[#fbbf24]/50 bg-[#fbbf24]/15 text-[#fcd34d]",
   overloaded: "border-[#fb923c]/50 bg-[#fb923c]/15 text-[#fdba74]",
 };
+
+const projectStatusClass: Record<ProjectStatus, string> = {
+  active: "border-[#2dd4bf]/45 bg-[#2dd4bf]/15 text-[#5eead4]",
+  on_hold: "border-[#2e303a] bg-[#22242c] text-[#9ca3af]",
+  done: "border-[#34d399]/45 bg-[#34d399]/15 text-[#6ee7b7]",
+};
+
+export function ProjectStatusBadge({ status, testId }: { status: ProjectStatus; testId?: string }) {
+  return (
+    <Badge
+      variant="outline"
+      className={cn("h-5", projectStatusClass[status])}
+      data-testid={testId}
+      data-status={status}
+    >
+      {PROJECT_STATUS_LABEL[status]}
+    </Badge>
+  );
+}
 
 export function HealthBadge({ health, testId }: { health: Health; testId?: string }) {
   return (

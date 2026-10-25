@@ -24,6 +24,8 @@ export function LabeledSelect({
   options,
   testId,
   full = false,
+  hideLabel = false,
+  disabled = false,
 }: {
   label: string;
   value: string;
@@ -31,20 +33,27 @@ export function LabeledSelect({
   options: { value: string; label: string }[];
   testId?: string;
   full?: boolean;
+  hideLabel?: boolean;
+  disabled?: boolean;
 }) {
   return (
     <div className="grid gap-1">
-      <span className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
-        {label}
-      </span>
+      {hideLabel ? (
+        <span className="sr-only">{label}</span>
+      ) : (
+        <span className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+          {label}
+        </span>
+      )}
       <Select
         value={value}
         items={options}
+        disabled={disabled}
         onValueChange={(next) => {
           if (next) onValueChange(next);
         }}
       >
-        <SelectTrigger className={full ? "w-full" : "w-full sm:w-auto sm:min-w-48"} data-testid={testId}>
+        <SelectTrigger className={full ? "w-full" : "w-full sm:w-auto sm:min-w-48"} data-testid={testId} disabled={disabled}>
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -96,6 +105,7 @@ export function PersonSelect({
   allowAll = false,
   allLabel = "Everyone",
   full = true,
+  disabled = false,
 }: {
   label: string;
   value: string;
@@ -105,6 +115,7 @@ export function PersonSelect({
   allowAll?: boolean;
   allLabel?: string;
   full?: boolean;
+  disabled?: boolean;
 }) {
   const known = value === "all" || developers.some((person) => person.id === value);
   const items = [
@@ -122,12 +133,13 @@ export function PersonSelect({
       <Select
         value={known ? value : UNASSIGNED}
         items={items}
+        disabled={disabled}
         onValueChange={(next) => {
           if (!next) return;
           onValueChange(next === UNASSIGNED ? "" : next);
         }}
       >
-        <SelectTrigger className={full ? "w-full" : "w-full sm:w-56"} data-testid={testId}>
+        <SelectTrigger className={full ? "w-full" : "w-full sm:w-56"} data-testid={testId} disabled={disabled}>
           <SelectValue placeholder="Choose a person" />
         </SelectTrigger>
         <SelectContent>
@@ -264,6 +276,7 @@ export function PredecessorSelect({
   options,
   hint,
   testId,
+  disabled = false,
 }: {
   label: string;
   value: string | null;
@@ -271,6 +284,7 @@ export function PredecessorSelect({
   options: { value: string; label: string }[];
   hint?: string;
   testId?: string;
+  disabled?: boolean;
 }) {
   const items = [{ value: NONE, label: "No predecessor" }, ...options];
   return (
@@ -281,12 +295,13 @@ export function PredecessorSelect({
       <Select
         value={value ?? NONE}
         items={items}
+        disabled={disabled}
         onValueChange={(next) => {
           if (!next) return;
           onValueChange(next === NONE ? null : next);
         }}
       >
-        <SelectTrigger className="w-full" data-testid={testId}>
+        <SelectTrigger className="w-full" data-testid={testId} disabled={disabled}>
           <SelectValue />
         </SelectTrigger>
         <SelectContent>

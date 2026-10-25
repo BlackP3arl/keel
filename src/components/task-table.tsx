@@ -168,10 +168,12 @@ export function TaskTable({
         title={heading}
         lede={lede}
         action={
-          <Button onClick={() => setCreating(true)} data-testid="new-task">
-            <Plus />
-            New task
-          </Button>
+          desk.canWrite ? (
+            <Button onClick={() => setCreating(true)} data-testid="new-task">
+              <Plus />
+              New task
+            </Button>
+          ) : undefined
         }
       />
 
@@ -265,10 +267,12 @@ export function TaskTable({
                 Clear filters
               </Button>
             ) : (
-              <Button onClick={() => setCreating(true)}>
-                <Plus />
-                New task
-              </Button>
+              desk.canWrite ? (
+                <Button onClick={() => setCreating(true)}>
+                  <Plus />
+                  New task
+                </Button>
+              ) : undefined
             )
           }
         />
@@ -325,11 +329,15 @@ export function TaskTable({
                       onClick={(event) => event.stopPropagation()}
                       onPointerDown={(event) => event.stopPropagation()}
                     >
-                      <TaskStatusSelect
-                        task={task}
-                        onOpenChange={noteStatusMenu}
-                        onChange={(status) => changeStatus(task, status)}
-                      />
+                      {desk.canWrite ? (
+                        <TaskStatusSelect
+                          task={task}
+                          onOpenChange={noteStatusMenu}
+                          onChange={(status) => changeStatus(task, status)}
+                        />
+                      ) : (
+                        <TaskStatusBadge status={task.status} />
+                      )}
                     </TableCell>
                     <TableCell>
                       <PriorityMark priority={task.priority} />
