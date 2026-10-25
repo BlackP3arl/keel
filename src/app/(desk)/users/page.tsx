@@ -4,7 +4,7 @@ import { auth } from "@/auth";
 import { EmptyState } from "@/components/page-header";
 import { UsersView } from "@/components/users-view";
 import { buttonVariants } from "@/components/ui/button";
-import { resolveSessionAccess, mergeManagedUsers } from "@/lib/access";
+import { resolveSessionAccess, mergeManagedUsers, type ManagedUser } from "@/lib/access";
 import { listStoredUsers } from "@/lib/users";
 
 export const metadata: Metadata = { title: "Users" };
@@ -27,7 +27,7 @@ export default async function Page() {
     );
   }
 
-  let users;
+  let users: ManagedUser[] = [];
   let error: string | null = null;
   try {
     users = mergeManagedUsers(await listStoredUsers());
